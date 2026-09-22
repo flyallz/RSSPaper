@@ -2,3 +2,12 @@
 ._*
 dist/
 *.xcuserstate
+__pycache__/
+*.pyc
+build/
+.venv/
+.env
+*.key
+api-key.bin
+state.json
+*.log

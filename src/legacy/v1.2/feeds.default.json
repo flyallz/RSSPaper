@@ -1,0 +1,142 @@
+[
+  {
+    "Id": "49fc7dba-bd37-4b3d-9299-84f5a43b8de0",
+    "Name": "教育研究",
+    "Url": "https://rss.cnki.net/knavi/rss/JYYJ?pcode=CJFD,CCJD",
+    "Required": true,
+    "Chinese": true
+  },
+  {
+    "Id": "3e597545-9e2b-40ac-9085-8af895266198",
+    "Name": "中国电化教育",
+    "Url": "https://rss.cnki.net/knavi/rss/ZDJY?pcode=CJFD,CCJD",
+    "Required": true,
+    "Chinese": true
+  },
+  {
+    "Id": "cc3024bf-073b-4258-8494-ed9634d5d705",
+    "Name": "电化教育研究",
+    "Url": "https://rss.cnki.net/knavi/rss/DHJY?pcode=CJFD,CCJD",
+    "Required": true,
+    "Chinese": true
+  },
+  {
+    "Id": "86b0376a-62d5-4ee0-b0a6-6e68c7e9e362",
+    "Name": "Computers & Education",
+    "Url": "https://rss.sciencedirect.com/publication/science/03601315",
+    "Required": true,
+    "Chinese": false
+  },
+  {
+    "Id": "361302b9-9bd7-4c03-ac28-b943d047e68e",
+    "Name": "Educational Technology Research and Development",
+    "Url": "https://link.springer.com/search.rss?facet-content-type=Article&facet-journal-id=11423&channel-name=Educational+Technology+Research+and+Development",
+    "Required": true,
+    "Chinese": false
+  },
+  {
+    "Id": "a480ddba-3793-45b6-8d80-e1260f6b195a",
+    "Name": "British Journal of Educational Technology",
+    "Url": "https://bera-journals.onlinelibrary.wiley.com/feed/14678535/most-recent",
+    "Required": true,
+    "Chinese": false
+  },
+  {
+    "Id": "350dbebe-9a57-4202-8844-43ecec78c36e",
+    "Name": "Learning and Instruction",
+    "Url": "https://rss.sciencedirect.com/publication/science/09594752",
+    "Required": true,
+    "Chinese": false
+  },
+  {
+    "Id": "1133eb5e-8d58-4102-ae44-b2728022c1c6",
+    "Name": "Computers in Human Behavior",
+    "Url": "https://rss.sciencedirect.com/publication/science/07475632",
+    "Required": true,
+    "Chinese": false
+  },
+  {
+    "Id": "116f9f28-7f99-4530-a7b2-523363e36b5f",
+    "Name": "International Journal of Educational Technology in Higher Education",
+    "Url": "https://link.springer.com/search.rss?facet-content-type=Article&facet-journal-id=41239&channel-name=International+Journal+of+Educational+Technology+in+Higher+Education",
+    "Required": true,
+    "Chinese": false
+  },
+  {
+    "Id": "f752a4a0-b057-4ddd-b5a0-8bb5e0d8207b",
+    "Name": "Journal of Computer Assisted Learning",
+    "Url": "https://onlinelibrary.wiley.com/feed/13652729/most-recent",
+    "Required": true,
+    "Chinese": false
+  },
+  {
+    "Id": "049e4fc7-1318-41e3-8045-71e0f9bb69af",
+    "Name": "课程·教材·教法",
+    "Url": "https://rss.cnki.net/knavi/rss/KJJF?pcode=CJFD,CCJD",
+    "Required": false,
+    "Chinese": true
+  },
+  {
+    "Id": "fefa3f3f-22da-41bc-9510-a760e07bccc1",
+    "Name": "华东师范大学学报（教育科学版）",
+    "Url": "https://rss.cnki.net/knavi/rss/HDXK?pcode=CJFD,CCJD",
+    "Required": false,
+    "Chinese": true
+  },
+  {
+    "Id": "df0cedc8-8250-4b02-b6c4-6f15538a22d7",
+    "Name": "开放教育研究",
+    "Url": "https://rss.cnki.net/knavi/rss/JFJJ?pcode=CJFD,CCJD",
+    "Required": false,
+    "Chinese": true
+  },
+  {
+    "Id": "89f19224-4012-489d-ad61-64eb6ff39397",
+    "Name": "现代教育技术",
+    "Url": "https://rss.cnki.net/knavi/rss/XJJS?pcode=CJFD,CCJD",
+    "Required": false,
+    "Chinese": true
+  },
+  {
+    "Id": "de2762d9-bcf3-494f-8674-6bcbdd803b4e",
+    "Name": "中国远程教育",
+    "Url": "https://rss.cnki.net/knavi/rss/DDJY?pcode=CJFD,CCJD",
+    "Required": false,
+    "Chinese": true
+  },
+  {
+    "Id": "632c5887-615b-49a0-a9af-6ef3d9d660b2",
+    "Name": "现代远程教育研究",
+    "Url": "https://rss.cnki.net/knavi/rss/XDYC?pcode=CJFD,CCJD",
+    "Required": false,
+    "Chinese": true
+  },
+  {
+    "Id": "bda39414-be18-4200-b2ae-e1a9deb7f63f",
+    "Name": "远程教育杂志",
+    "Url": "https://rss.cnki.net/knavi/rss/YCJY?pcode=CJFD,CCJD",
+    "Required": false,
+    "Chinese": true
+  },
+  {
+    "Id": "4a2aa426-92bf-4d37-8d40-8dbe9c2d1cfb",
+    "Name": "现代远距离教育",
+    "Url": "https://rss.cnki.net/knavi/rss/YUAN?pcode=CJFD,CCJD",
+    "Required": false,
+    "Chinese": true
+  },
+  {
+    "Id": "22c1d899-a055-4ba2-8892-f26f6ba7f3ae",
+    "Name": "The Internet and Higher Education",
+    "Url": "https://rss.sciencedirect.com/publication/science/10967516",
+    "Required": false,
+    "Chinese": false
+  },
+  {
+    "Id": "1433c27f-5d80-4da6-a94d-0e958ab38333",
+    "Name": "Learning, Media and Technology",
+    "Url": "https://www.tandfonline.com/feed/rss/cjem20",
+    "Required": false,
+    "Chinese": false
+  }
+]
