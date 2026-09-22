@@ -1,0 +1,347 @@
+{
+  "date": "2026-09-21",
+  "notes": [
+    "11 个中文刊 CNKI RSS 均 HTTP 200、XML 可解析、频道名称匹配；每源返回最近 20 条。",
+    "HTTP 200 不代表 RSS：华东师大与中国远程教育的官网 XML 地址返回 HTML 404，因此采用 CNKI 源。",
+    "IEEE Computer Society 旧源可解析，但内容停在2017年，已排除。",
+    "现代远程教育研究官网 RSS 为2026年第4期，日期格式不标准；本次 CNKI 源更新较新，主 OPML 只收 CNKI。",
+    "RSS 条目数仅是本次快照，不是覆盖率或稳定性承诺。"
+  ],
+  "endpoints": [
+    {
+      "key": "ce",
+      "url": "https://rss.sciencedirect.com/publication/science/03601315",
+      "status": 200,
+      "content_type": "application/rss+xml",
+      "bytes": 19387,
+      "root": "rss",
+      "items": 33
+    },
+    {
+      "key": "li",
+      "url": "https://rss.sciencedirect.com/publication/science/09594752",
+      "status": 200,
+      "content_type": "application/rss+xml",
+      "bytes": 15863,
+      "root": "rss",
+      "items": 27
+    },
+    {
+      "key": "chb",
+      "url": "https://rss.sciencedirect.com/publication/science/07475632",
+      "status": 200,
+      "content_type": "application/rss+xml",
+      "bytes": 33185,
+      "root": "rss",
+      "items": 56
+    },
+    {
+      "key": "ihe",
+      "url": "https://rss.sciencedirect.com/publication/science/10967516",
+      "status": 200,
+      "content_type": "application/rss+xml",
+      "bytes": 7970,
+      "root": "rss",
+      "items": 13
+    },
+    {
+      "key": "etrd",
+      "url": "https://link.springer.com/search.rss?facet-content-type=Article&facet-journal-id=11423&channel-name=Educational+Technology+Research+and+Development",
+      "status": 200,
+      "content_type": "application/xml",
+      "bytes": 40703,
+      "root": "rss",
+      "items": 20
+    },
+    {
+      "key": "ijethe",
+      "url": "https://educationaltechnologyjournal.springeropen.com/articles/most-recent/rss.xml",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 368902
+    },
+    {
+      "key": "ijethe2",
+      "url": "https://link.springer.com/search.rss?facet-content-type=Article&facet-journal-id=41239&channel-name=International+Journal+of+Educational+Technology+in+Higher+Education",
+      "status": 200,
+      "content_type": "application/xml",
+      "bytes": 39639,
+      "root": "rss",
+      "items": 20
+    },
+    {
+      "key": "bjet",
+      "url": "https://bera-journals.onlinelibrary.wiley.com/feed/14678535/most-recent",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "bytes": 244743,
+      "root": "rss",
+      "items": 31
+    },
+    {
+      "key": "jcal",
+      "url": "https://onlinelibrary.wiley.com/feed/13652729/most-recent",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "bytes": 254809,
+      "root": "rss",
+      "items": 41
+    },
+    {
+      "key": "lmt",
+      "url": "https://www.tandfonline.com/feed/rss/cjem20",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "bytes": 133630,
+      "root": "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}RDF",
+      "items": 95
+    },
+    {
+      "key": "ieee2",
+      "url": "https://ieeexplore.ieee.org/rss/TOC4620076.XML",
+      "error": "HTTP Error 418: Unknown Code"
+    },
+    {
+      "key": "ieee3",
+      "url": "https://www.computer.org/rss/tlt.xml",
+      "status": 200,
+      "content_type": "application/xml; charset=utf-8",
+      "bytes": 39681,
+      "root": "rss",
+      "items": 100
+    },
+    {
+      "key": "ecnu_rssinfo",
+      "url": "https://xbjk.ecnu.edu.cn/CN/rss/showRssInfo.do",
+      "status": 200,
+      "content_type": "text/html;charset=UTF-8",
+      "bytes": 174987
+    },
+    {
+      "key": "ecnu_rss",
+      "url": "https://xbjk.ecnu.edu.cn/CN/rss_dqml_1000-5560.xml",
+      "status": 200,
+      "content_type": "text/html;charset=UTF-8",
+      "bytes": 3241
+    },
+    {
+      "key": "ecnu_first",
+      "url": "https://xbjk.ecnu.edu.cn/CN/rss_first_1000-5560.xml",
+      "status": 200,
+      "content_type": "text/html;charset=UTF-8",
+      "bytes": 3241
+    },
+    {
+      "key": "ecnu_alert",
+      "url": "https://xbjk.ecnu.edu.cn/CN/alert/showAlertInfo.do",
+      "status": 200,
+      "content_type": "text/html;charset=UTF-8",
+      "bytes": 18622
+    },
+    {
+      "key": "scou_clean",
+      "url": "https://xdyjyj.scou.cn/download_upload_file.aspx?file_name=/rss/xdycjyyj/cn/current.xml",
+      "status": 200,
+      "content_type": "text/xml; charset=utf-8",
+      "bytes": 18057,
+      "root": "rss",
+      "items": 11
+    },
+    {
+      "key": "scou_alert",
+      "url": "https://xdyjyj.scou.cn/xdycjyyj/article/toc_alert",
+      "status": 200,
+      "content_type": "text/html",
+      "bytes": 4870
+    },
+    {
+      "key": "cjde_rssinfo",
+      "url": "https://cjde.ouchn.edu.cn/CN/rss/showRssInfo.do",
+      "status": 200,
+      "content_type": "text/html;charset=UTF-8",
+      "bytes": 17673
+    },
+    {
+      "key": "cjde_xml",
+      "url": "https://cjde.ouchn.edu.cn/CN/rss_dqml_1009-458X.xml",
+      "status": 200,
+      "content_type": "text/html;charset=UTF-8",
+      "bytes": 3241
+    },
+    {
+      "key": "cjde_first",
+      "url": "https://cjde.ouchn.edu.cn/CN/rss_first_1009-458X.xml",
+      "status": 200,
+      "content_type": "text/html;charset=UTF-8",
+      "bytes": 3241
+    },
+    {
+      "key": "cjde_alert",
+      "url": "https://cjde.ouchn.edu.cn/CN/alert/showAlertInfo.do",
+      "status": 200,
+      "content_type": "text/html;charset=UTF-8",
+      "bytes": 13653
+    },
+    {
+      "key": "zdjy_alert",
+      "url": "https://zdjy.cbpt.cnki.net/portal/journal/portal/client/email_alert",
+      "status": 200,
+      "content_type": "text/html;charset=UTF-8",
+      "bytes": 61306
+    },
+    {
+      "key": "xjjs",
+      "url": "https://xjjs.cbpt.cnki.net/WKH/WebPublication/index.aspx?mid=xjjs",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 30195
+    },
+    {
+      "key": "xjjs_portal",
+      "url": "https://xjjs.cbpt.cnki.net/portal/journal/portal/client/index",
+      "error": "HTTP Error 500: Internal Server Error"
+    },
+    {
+      "key": "kjjf_portal",
+      "url": "https://kjjf.cbpt.cnki.net/portal/journal/portal/client/index",
+      "error": "HTTP Error 500: Internal Server Error"
+    },
+    {
+      "key": "yuan_portal",
+      "url": "https://yuan.cbpt.cnki.net/portal/journal/portal/client/index",
+      "status": 200,
+      "content_type": "text/html;charset=UTF-8",
+      "bytes": 289188
+    },
+    {
+      "key": "dej",
+      "url": "https://dej.zjtvu.edu.cn/",
+      "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate (_ssl.c:1010)>"
+    },
+    {
+      "key": "dej_http",
+      "url": "http://dej.zjtvu.edu.cn/",
+      "status": 200,
+      "content_type": "text/html",
+      "bytes": 1494
+    },
+    {
+      "key": "eer",
+      "url": "https://aver.nwnu.edu.cn/",
+      "error": "HTTP Error 412: Precondition Failed"
+    },
+    {
+      "key": "jyyj",
+      "url": "https://jyyj.cnaes.edu.cn/",
+      "status": 200,
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 528352
+    },
+    {
+      "key": "openedu",
+      "url": "https://openedu.sou.edu.cn/frontsite/index.aspx",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 62518
+    },
+    {
+      "url": "https://rss.cnki.net/knavi/rss/JYYJ?pcode=CJFD,CCJD",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "root": "rss",
+      "items": 20,
+      "channel_title": "教育研究-CNKI",
+      "latest_item_date": "Thu, 27 Aug 2026 16:00:00 GMT"
+    },
+    {
+      "url": "https://rss.cnki.net/knavi/rss/ZDJY?pcode=CJFD,CCJD",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "root": "rss",
+      "items": 20,
+      "channel_title": "中国电化教育-CNKI",
+      "latest_item_date": "Sun, 06 Sep 2026 16:00:00 GMT"
+    },
+    {
+      "url": "https://rss.cnki.net/knavi/rss/DHJY?pcode=CJFD,CCJD",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "root": "rss",
+      "items": 20,
+      "channel_title": "电化教育研究-CNKI",
+      "latest_item_date": "Sun, 20 Sep 2026 16:00:00 GMT"
+    },
+    {
+      "url": "https://rss.cnki.net/knavi/rss/KJJF?pcode=CJFD,CCJD",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "root": "rss",
+      "items": 20,
+      "channel_title": "课程·教材·教法-CNKI",
+      "latest_item_date": "Tue, 30 Jun 2026 16:00:00 GMT"
+    },
+    {
+      "url": "https://rss.cnki.net/knavi/rss/HDXK?pcode=CJFD,CCJD",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "root": "rss",
+      "items": 20,
+      "channel_title": "华东师范大学学报(教育科学版)-CNKI",
+      "latest_item_date": "Mon, 31 Aug 2026 16:00:00 GMT"
+    },
+    {
+      "url": "https://rss.cnki.net/knavi/rss/JFJJ?pcode=CJFD,CCJD",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "root": "rss",
+      "items": 20,
+      "channel_title": "开放教育研究-CNKI",
+      "latest_item_date": "Mon, 27 Jul 2026 16:00:00 GMT"
+    },
+    {
+      "url": "https://rss.cnki.net/knavi/rss/XJJS?pcode=CJFD,CCJD",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "root": "rss",
+      "items": 20,
+      "channel_title": "现代教育技术-CNKI",
+      "latest_item_date": "Fri, 14 Aug 2026 16:00:00 GMT"
+    },
+    {
+      "url": "https://rss.cnki.net/knavi/rss/DDJY?pcode=CJFD,CCJD",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "root": "rss",
+      "items": 20,
+      "channel_title": "中国远程教育-CNKI",
+      "latest_item_date": "Mon, 24 Aug 2026 16:00:00 GMT"
+    },
+    {
+      "url": "https://rss.cnki.net/knavi/rss/XDYC?pcode=CJFD,CCJD",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "root": "rss",
+      "items": 20,
+      "channel_title": "现代远程教育研究-CNKI",
+      "latest_item_date": "Sat, 19 Sep 2026 16:00:00 GMT"
+    },
+    {
+      "url": "https://rss.cnki.net/knavi/rss/YCJY?pcode=CJFD,CCJD",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "root": "rss",
+      "items": 20,
+      "channel_title": "远程教育杂志-CNKI",
+      "latest_item_date": "Sun, 19 Jul 2026 16:00:00 GMT"
+    },
+    {
+      "url": "https://rss.cnki.net/knavi/rss/YUAN?pcode=CJFD,CCJD",
+      "status": 200,
+      "content_type": "application/xml;charset=UTF-8",
+      "root": "rss",
+      "items": 20,
+      "channel_title": "现代远距离教育-CNKI",
+      "latest_item_date": "Thu, 06 Aug 2026 16:00:00 GMT"
+    }
+  ]
+}
