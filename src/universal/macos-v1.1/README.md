@@ -16,6 +16,6 @@
 
 ## 从源码构建
 
-在 Mac 上创建 Python 3.12 或 3.13 虚拟环境，安装本目录 `requirements.txt`，然后从仓库根目录运行 `PYTHON=/path/to/venv/bin/python scripts/build-universal-macos.sh`。脚本运行核心测试、生成图标、打包并检查应用，最后生成 ZIP。`JOURNAL_RADAR_HOME` 可指向临时目录供测试使用。
+在 Mac 上创建 Python 3.12 或 3.13 虚拟环境，安装本目录 `requirements.txt`，然后从仓库根目录运行 `PYTHON=/path/to/venv/bin/python bash scripts/build-universal-macos.sh`。脚本运行核心测试、生成图标、打包并检查应用，最后生成 ZIP。`JOURNAL_RADAR_HOME` 可指向临时目录供测试使用。
 
 这个 ZIP 未经 Apple Developer ID 签名或公证；分发时如需无提示安装，应由开发者用自己的证书签名并公证。
