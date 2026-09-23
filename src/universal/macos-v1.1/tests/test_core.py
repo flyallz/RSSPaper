@@ -75,6 +75,31 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(len(imported), 1)
             self.assertEqual(imported[0]["value"], sources[0]["value"])
 
+    def test_arxiv_topic_and_second_layer_keywords(self):
+        source = core.create_source(
+            "AR learning",
+            "arxiv",
+            "cs.HC",
+            "augmented reality, mixed reality",
+            "survey",
+        )
+        self.assertEqual(source["value"], "cat:cs.HC")
+        atom = b'''<feed xmlns="http://www.w3.org/2005/Atom">
+          <entry><title>Augmented reality for collaborative learning</title><id>https://arxiv.org/abs/2609.1</id><link rel="alternate" href="https://arxiv.org/abs/2609.1"/><updated>2026-09-23T00:00:00Z</updated><summary>A classroom experiment.</summary></entry>
+          <entry><title>A survey of augmented reality</title><id>https://arxiv.org/abs/2609.2</id><link rel="alternate" href="https://arxiv.org/abs/2609.2"/><updated>2026-09-22T00:00:00Z</updated><summary>Review paper.</summary></entry>
+          <entry><title>Database optimization</title><id>https://arxiv.org/abs/2609.3</id><link rel="alternate" href="https://arxiv.org/abs/2609.3"/><updated>2026-09-21T00:00:00Z</updated><summary>Storage engines.</summary></entry>
+        </feed>'''
+        with patch.object(core, "_read", return_value=atom) as mocked:
+            papers = core.fetch_source(source)
+        self.assertEqual([paper["title"] for paper in papers], ["Augmented reality for collaborative learning"])
+        self.assertIn("search_query=cat%3Acs.HC", mocked.call_args.args[0])
+
+    def test_https_opener_uses_verified_certifi_context(self):
+        opener = core._opener("")
+        https_handlers = [handler for handler in opener.handlers if handler.__class__.__name__ == "HTTPSHandler"]
+        self.assertEqual(len(https_handlers), 1)
+        self.assertEqual(https_handlers[0]._context.verify_mode, 2)
+
     def test_translation_uses_utf8_and_click_request_parameters(self):
         response = {"choices": [{"message": {"content": "跨学科学习"}}]}
         captured = {}

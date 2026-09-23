@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
+    QListView,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -131,21 +132,32 @@ class SourceEditor(QDialog):
         self.source = source
         self.result_source: dict | None = None
         self.setWindowTitle("编辑期刊来源" if source else "添加期刊来源")
-        self.setMinimumWidth(510)
+        self.setMinimumWidth(620)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 22, 24, 22)
         layout.setSpacing(16)
         title = QLabel("期刊来源")
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
-        form = QFormLayout()
-        form.setSpacing(13)
+        panel = QFrame()
+        panel.setObjectName("formCard")
+        form = QFormLayout(panel)
+        form.setContentsMargins(22, 20, 22, 20)
+        form.setHorizontalSpacing(18)
+        form.setVerticalSpacing(14)
         self.name_edit = QLineEdit(source["name"] if source else "")
         self.name_edit.setPlaceholderText("例如：Nature / 中国科学")
         self.kind_box = QComboBox()
-        self.kind_box.addItem("RSS 地址", "rss")
+        self.kind_box.addItem("RSS / Atom 地址", "rss")
         self.kind_box.addItem("Crossref · ISSN", "crossref")
+        self.kind_box.addItem("arXiv 主题检索", "arxiv")
         self.value_edit = QLineEdit(source["value"] if source else "")
+        self.include_edit = QLineEdit(", ".join(source.get("include_keywords", [])) if source else "")
+        self.include_edit.setPlaceholderText("例如：augmented reality, learning analytics")
+        self.exclude_edit = QLineEdit(", ".join(source.get("exclude_keywords", [])) if source else "")
+        self.exclude_edit.setPlaceholderText("可选，例如：survey, correction")
+        self.match_all = QCheckBox("必须同时包含全部关键词（默认匹配任一关键词）")
+        self.match_all.setChecked(bool(source and source.get("match_all")))
         self.hint = QLabel()
         self.hint.setObjectName("notice")
         self.hint.setWordWrap(True)
@@ -153,9 +165,12 @@ class SourceEditor(QDialog):
         form.addRow("来源类型", self.kind_box)
         form.addRow("地址 / ISSN", self.value_edit)
         form.addRow("", self.hint)
-        layout.addLayout(form)
+        form.addRow("二层包含关键词", self.include_edit)
+        form.addRow("排除关键词", self.exclude_edit)
+        form.addRow("匹配方式", self.match_all)
+        layout.addWidget(panel)
         if source:
-            self.kind_box.setCurrentIndex(0 if source["kind"] == "rss" else 1)
+            self.kind_box.setCurrentIndex({"rss": 0, "crossref": 1, "arxiv": 2}.get(source["kind"], 0))
         self.kind_box.currentIndexChanged.connect(self.update_hint)
         self.update_hint()
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
@@ -168,14 +183,20 @@ class SourceEditor(QDialog):
     def update_hint(self) -> None:
         if self.kind_box.currentData() == "rss":
             self.value_edit.setPlaceholderText("https://example.org/journal/feed")
-            self.hint.setText("适合出版社或期刊提供的 RSS / Atom 订阅地址。")
-        else:
+            self.hint.setText("先读取 RSS / Atom，再用下面的关键词筛选标题和摘要。")
+        elif self.kind_box.currentData() == "crossref":
             self.value_edit.setPlaceholderText("例如 0360-1315")
             self.hint.setText("只需期刊 ISSN；通过 Crossref 获取近期论文，无须 API 密钥。")
+        else:
+            self.value_edit.setPlaceholderText('例如 cs.HC，或 cat:cs.HC AND all:"augmented reality"')
+            self.hint.setText("输入 arXiv 分类或检索式，按提交时间读取最新论文；可继续用下面的关键词做第二层筛选。")
 
     def save(self) -> None:
         try:
-            result = create_source(self.name_edit.text(), self.kind_box.currentData(), self.value_edit.text())
+            result = create_source(
+                self.name_edit.text(), self.kind_box.currentData(), self.value_edit.text(),
+                self.include_edit.text(), self.exclude_edit.text(), self.match_all.isChecked(),
+            )
         except ValueError as error:
             QMessageBox.warning(self, "无法保存", str(error))
             return
@@ -250,7 +271,8 @@ class SourcesDialog(QDialog):
         for row, source in enumerate(sources):
             status = statuses.get(source["id"])
             label = "尚未刷新" if not status else (f"成功 · {status['count']} 条" if status.get("ok") else "读取失败")
-            values = [source["name"], "RSS" if source["kind"] == "rss" else "Crossref", source["value"], label]
+            type_label = {"rss": "RSS", "crossref": "Crossref", "arxiv": "arXiv"}.get(source["kind"], source["kind"])
+            values = [source["name"], type_label, source["value"], label]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 if status and not status.get("ok") and column == 3:
@@ -356,8 +378,12 @@ class SettingsDialog(QDialog):
         intro.setObjectName("pageSubtitle")
         intro.setWordWrap(True)
         layout.addWidget(intro)
-        form = QFormLayout()
-        form.setSpacing(13)
+        panel = QFrame()
+        panel.setObjectName("formCard")
+        form = QFormLayout(panel)
+        form.setContentsMargins(22, 20, 22, 20)
+        form.setHorizontalSpacing(18)
+        form.setVerticalSpacing(14)
         self.endpoint = QLineEdit(self.settings.get("api_endpoint", ""))
         self.endpoint.setPlaceholderText("https://api.deepseek.com/chat/completions")
         self.model = QLineEdit(self.settings.get("api_model", "deepseek-flash"))
@@ -527,6 +553,7 @@ class MainWindow(QMainWindow):
         label.setObjectName("sidebarCaption")
         side.addWidget(label)
         self.profile_box = QComboBox()
+        self.profile_box.setView(QListView())
         self.profile_box.currentIndexChanged.connect(self.change_profile)
         side.addWidget(self.profile_box)
         self.new_profile_button = make_button("＋ 新建学科", "sidebarAction")
@@ -806,7 +833,7 @@ class MainWindow(QMainWindow):
         for paper in papers:
             if selected_source and paper.get("source_id") != selected_source:
                 continue
-            if query and query not in (paper.get("title", "") + " " + paper.get("source_name", "")).casefold():
+            if query and query not in (paper.get("title", "") + " " + paper.get("abstract", "") + " " + paper.get("source_name", "")).casefold():
                 continue
             if days and not is_recent_publication(paper, days):
                 continue
@@ -859,6 +886,12 @@ class MainWindow(QMainWindow):
         translation.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         translation.setVisible(bool(translation.text()))
         column.addWidget(translation)
+        abstract_text = paper.get("abstract", "").strip()
+        if abstract_text:
+            abstract = QLabel(abstract_text[:360] + ("…" if len(abstract_text) > 360 else ""))
+            abstract.setObjectName("abstract")
+            abstract.setWordWrap(True)
+            column.addWidget(abstract)
         footer = QHBoxLayout()
         date_label = paper_date_label(paper)
         meta = QLabel(f"{paper.get('source_name', '')}  ·  {date_label}")
@@ -954,6 +987,12 @@ def self_test() -> int:
 def main() -> int:
     if "--self-test" in sys.argv:
         return self_test()
+    if "--diagnose-feed" in sys.argv:
+        index = sys.argv.index("--diagnose-feed")
+        url = sys.argv[index + 1]
+        papers = fetch_source(create_source("诊断", "rss", url))
+        print(f"OK {len(papers)} {papers[0]['title']}")
+        return 0
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setFont(QFont("Microsoft YaHei UI", 10))

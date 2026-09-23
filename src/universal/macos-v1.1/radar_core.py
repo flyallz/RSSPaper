@@ -7,6 +7,7 @@ import html
 import json
 import os
 import re
+import ssl
 import tempfile
 import uuid
 import xml.etree.ElementTree as ET
@@ -15,7 +16,9 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urljoin, urlparse
-from urllib.request import ProxyHandler, Request, build_opener
+from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
+
+import certifi
 
 
 APP_NAME = "期刊雷达"
@@ -69,6 +72,10 @@ def load_state(folder: Path | None = None) -> dict:
         profile.setdefault("sources", [])
         profile.setdefault("id", uuid.uuid4().hex)
         profile.setdefault("name", "未命名学科")
+        for source in profile["sources"]:
+            source.setdefault("include_keywords", [])
+            source.setdefault("exclude_keywords", [])
+            source.setdefault("match_all", False)
     ids = {p["id"] for p in state["profiles"]}
     if state.get("active_profile_id") not in ids:
         state["active_profile_id"] = state["profiles"][0]["id"]
@@ -120,7 +127,19 @@ def normalize_issn(value: str) -> str:
     return compact[:4] + "-" + compact[4:]
 
 
-def create_source(name: str, kind: str, value: str) -> dict:
+def _keyword_list(value: str | list[str]) -> list[str]:
+    values = value if isinstance(value, list) else re.split(r"[,，;；\n]+", value)
+    return list(dict.fromkeys(part.strip() for part in values if part.strip()))
+
+
+def create_source(
+    name: str,
+    kind: str,
+    value: str,
+    include_keywords: str | list[str] = "",
+    exclude_keywords: str | list[str] = "",
+    match_all: bool = False,
+) -> dict:
     name, value = name.strip(), value.strip()
     if not name:
         raise ValueError("请填写期刊名称")
@@ -129,9 +148,23 @@ def create_source(name: str, kind: str, value: str) -> dict:
             raise ValueError("RSS 地址必须以 http:// 或 https:// 开头")
     elif kind == "crossref":
         value = normalize_issn(value)
+    elif kind == "arxiv":
+        if not value:
+            raise ValueError("请填写 arXiv 分类或检索式")
+        if re.fullmatch(r"[A-Za-z-]+(?:\.[A-Za-z-]+)?", value):
+            value = "cat:" + value
     else:
         raise ValueError("不支持的来源类型")
-    return {"id": uuid.uuid4().hex, "name": name, "kind": kind, "value": value, "enabled": True}
+    return {
+        "id": uuid.uuid4().hex,
+        "name": name,
+        "kind": kind,
+        "value": value,
+        "enabled": True,
+        "include_keywords": _keyword_list(include_keywords),
+        "exclude_keywords": _keyword_list(exclude_keywords),
+        "match_all": bool(match_all),
+    }
 
 
 def _local(tag: str) -> str:
@@ -192,7 +225,7 @@ def _description_date(value: str) -> tuple[str, str, str]:
     return parsed, precision, "online" if raw.lower().startswith("available online") else "publication"
 
 
-def _paper(source: dict, title: str, link: str, date: str, precision: str = "", date_kind: str = "") -> dict:
+def _paper(source: dict, title: str, link: str, date: str, precision: str = "", date_kind: str = "", abstract: str = "") -> dict:
     return {
         "id": hashlib.sha256((source["id"] + "|" + link).encode("utf-8")).hexdigest(),
         "source_id": source["id"],
@@ -202,6 +235,7 @@ def _paper(source: dict, title: str, link: str, date: str, precision: str = "", 
         "date": date,
         "date_precision": precision,
         "date_kind": date_kind,
+        "abstract": abstract,
     }
 
 
@@ -229,7 +263,8 @@ def parse_rss(payload: bytes, source: dict) -> list[dict]:
         if not date and description:
             date, precision, date_kind = _description_date(description)
         if title and valid_http_url(link):
-            papers.append(_paper(source, title, link, date, precision, date_kind))
+            abstract = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", description))).strip()
+            papers.append(_paper(source, title, link, date, precision, date_kind, abstract))
         if len(papers) >= 60:
             break
     return papers
@@ -270,8 +305,23 @@ def _opener(proxy: str):
     if proxy:
         if not valid_http_url(proxy):
             raise ValueError("代理地址必须以 http:// 或 https:// 开头")
-        return build_opener(ProxyHandler({"http": proxy, "https": proxy}))
-    return build_opener(ProxyHandler())
+        proxy_handler = ProxyHandler({"http": proxy, "https": proxy})
+    else:
+        proxy_handler = ProxyHandler()
+    context = ssl.create_default_context(cafile=certifi.where())
+    return build_opener(proxy_handler, HTTPSHandler(context=context))
+
+
+def paper_matches_source(paper: dict, source: dict) -> bool:
+    text = (paper.get("title", "") + " " + paper.get("abstract", "")).casefold()
+    includes = [str(value).casefold() for value in source.get("include_keywords", []) if str(value).strip()]
+    excludes = [str(value).casefold() for value in source.get("exclude_keywords", []) if str(value).strip()]
+    if any(value in text for value in excludes):
+        return False
+    if not includes:
+        return True
+    matches = [value in text for value in includes]
+    return all(matches) if source.get("match_all") else any(matches)
 
 
 def _read(url: str, proxy: str, timeout: int = 22) -> bytes:
@@ -291,11 +341,14 @@ def fetch_source(source: dict, proxy: str = "") -> list[dict]:
         query = urlencode({"rows": 30, "sort": "published", "order": "desc", "select": "DOI,title,URL,published,published-online,published-print,issued"})
         url = "https://api.crossref.org/journals/" + quote(issn) + "/works?" + query
         papers = parse_crossref(_read(url, proxy), source)
+    elif source["kind"] == "arxiv":
+        query = urlencode({"search_query": source["value"], "start": 0, "max_results": 60, "sortBy": "submittedDate", "sortOrder": "descending"})
+        papers = parse_rss(_read("https://export.arxiv.org/api/query?" + query, proxy), source)
     else:
         raise ValueError("未知来源类型")
     if not papers:
         raise ValueError("此来源没有可用的论文标题与链接")
-    return papers
+    return [paper for paper in papers if paper_matches_source(paper, source)]
 
 
 def compact_error(error: Exception) -> str:
