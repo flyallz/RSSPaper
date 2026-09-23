@@ -1,10 +1,10 @@
-# 期刊雷达 · 通用版 v1.2.2（Mac）
+# 期刊雷达 · 通用版 v1.3（Mac）
 
 这是跨学科通用版的 Mac v1.2。它修复了 Mac 安装包缺少可信 CA 证书、HTTPS RSS 无法刷新的问题，并统一了学科选择和来源编辑界面。除 RSS/Atom、Crossref ISSN、OPML 与按需翻译外，现在还支持 arXiv 主题检索及标题/摘要的第二层关键词过滤。
 
 ## 使用
 
-解压 `JournalRadar-Universal-v1.2.2-Mac-arm64.zip`，将 `JournalRadar.app` 放入“应用程序”并打开。适用于 Apple 芯片的 macOS 13 或更新版本。首次打开未公证的应用时，macOS 可能要求你在“系统设置 → 隐私与安全性”中决定是否允许打开。
+解压 `JournalRadar-Universal-v1.3-Mac-arm64.zip`，将 `JournalRadar.app` 放入“应用程序”并打开。适用于 Apple 芯片的 macOS 13 或更新版本。首次打开未公证的应用时，macOS 可能要求你在“系统设置 → 隐私与安全性”中决定是否允许打开。
 
 点击“＋ 新建学科”建立工作区，在“管理期刊来源”中添加 RSS 地址或 ISSN，也可导入 OPML。仓库的 `data/edtech-radar.opml` 可作为教育技术工作区的起点。添加或修改来源后会立即刷新；开启自动刷新时，默认每 30 分钟检查一次，程序关闭后不在后台运行。
 

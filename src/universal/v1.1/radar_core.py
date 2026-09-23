@@ -400,19 +400,28 @@ def export_opml(path: Path, sources: list[dict]) -> None:
     path.write_bytes(ET.tostring(root, encoding="utf-8", xml_declaration=True))
 
 
-def translation_key(endpoint: str, model: str, title: str) -> str:
-    return hashlib.sha256((endpoint + "|" + model + "|" + title).encode("utf-8")).hexdigest()
+def contains_cjk(text: str) -> bool:
+    return any("\u3400" <= char <= "\u9fff" for char in text)
 
 
-def translate_title(title: str, endpoint: str, model: str, api_key: str, proxy: str = "") -> str:
+def translation_key(endpoint: str, model: str, title: str, target_language: str = "zh") -> str:
+    return hashlib.sha256((endpoint + "|" + model + "|" + target_language + "|" + title).encode("utf-8")).hexdigest()
+
+
+def translate_title(title: str, endpoint: str, model: str, api_key: str, proxy: str = "", target_language: str = "zh") -> str:
     if not valid_api_endpoint(endpoint) or not model:
         raise ValueError("请在设置中填写翻译接口和模型")
     if not api_key and urlparse(endpoint).hostname not in ("localhost", "127.0.0.1", "::1"):
         raise ValueError("远程翻译接口需要 API 密钥")
+    instruction = (
+        "将学术论文标题准确翻译为英文。只返回英文译题，不加解释。"
+        if target_language == "en"
+        else "将学术论文标题准确翻译为简体中文。只返回译题，不加解释。"
+    )
     params: dict = {
         "model": model,
         "messages": [
-            {"role": "system", "content": "将学术论文标题准确翻译为简体中文。只返回译题，不加解释。"},
+            {"role": "system", "content": instruction},
             {"role": "user", "content": title},
         ],
         "max_tokens": 180,

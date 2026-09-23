@@ -43,8 +43,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName': '期刊雷达',
         'CFBundleDisplayName': '期刊雷达 · 通用版',
-        'CFBundleShortVersionString': '1.2.2',
-        'CFBundleVersion': '1.2.2',
+        'CFBundleShortVersionString': '1.3',
+        'CFBundleVersion': '1.3.0',
         'LSMinimumSystemVersion': '13.0',
         'NSHighResolutionCapable': True,
     },

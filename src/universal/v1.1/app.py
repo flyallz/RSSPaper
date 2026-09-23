@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 from radar_core import (
     APP_NAME,
     compact_error,
+    contains_cjk,
     create_source,
     current_profile,
     data_dir,
@@ -111,7 +112,7 @@ class TranslateWorker(QThread):
     translated = Signal(str, str)
     failed = Signal(str, str)
 
-    def __init__(self, paper_id: str, title: str, endpoint: str, model: str, api_key: str, proxy: str):
+    def __init__(self, paper_id: str, title: str, endpoint: str, model: str, api_key: str, proxy: str, target_language: str = "zh"):
         super().__init__()
         self.paper_id = paper_id
         self.title = title
@@ -119,10 +120,11 @@ class TranslateWorker(QThread):
         self.model = model
         self.api_key = api_key
         self.proxy = proxy
+        self.target_language = target_language
 
     def run(self) -> None:
         try:
-            self.translated.emit(self.paper_id, translate_title(self.title, self.endpoint, self.model, self.api_key, self.proxy))
+            self.translated.emit(self.paper_id, translate_title(self.title, self.endpoint, self.model, self.api_key, self.proxy, self.target_language))
         except Exception as error:
             self.failed.emit(self.paper_id, compact_error(error))
 
@@ -385,7 +387,7 @@ class SettingsDialog(QDialog):
         title = QLabel("应用设置")
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
-        intro = QLabel("翻译只在点击论文卡片的“译为中文”时调用接口；同一译题会本地缓存。")
+        intro = QLabel("翻译仅在点击论文卡片时调用：中文标题译为英文，其他标题译为中文；同一译题会本地缓存。")
         intro.setObjectName("pageSubtitle")
         intro.setWordWrap(True)
         layout.addWidget(intro)
@@ -421,7 +423,7 @@ class SettingsDialog(QDialog):
         form.addRow("", self.clear_key)
         form.addRow("网络代理", self.proxy)
         form.addRow("自动刷新间隔", self.minutes)
-        layout.addLayout(form)
+        layout.addWidget(panel)
         self.test_label = QLabel("密钥以 Windows 当前用户加密方式保存在本机；本地翻译接口可留空。")
         self.test_label.setObjectName("notice")
         self.test_label.setWordWrap(True)
@@ -895,7 +897,8 @@ class MainWindow(QMainWindow):
         title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         column.addWidget(title)
         settings = self.state["settings"]
-        key = translation_key(settings.get("api_endpoint", ""), settings.get("api_model", ""), paper.get("title", ""))
+        target_language = "en" if contains_cjk(paper.get("title", "")) else "zh"
+        key = translation_key(settings.get("api_endpoint", ""), settings.get("api_model", ""), paper.get("title", ""), target_language)
         translation = QLabel(self.state["translations"].get(key, ""))
         translation.setObjectName("translation")
         translation.setWordWrap(True)
@@ -904,17 +907,28 @@ class MainWindow(QMainWindow):
         column.addWidget(translation)
         abstract_text = paper.get("abstract", "").strip()
         if abstract_text:
-            abstract = QLabel(abstract_text[:360] + ("…" if len(abstract_text) > 360 else ""))
+            collapsed = abstract_text[:360] + ("…" if len(abstract_text) > 360 else "")
+            abstract = QLabel(collapsed)
             abstract.setObjectName("abstract")
             abstract.setWordWrap(True)
+            abstract.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             column.addWidget(abstract)
+            if len(abstract_text) > 360:
+                toggle = make_button("展开摘要")
+                toggle.setObjectName("textAction")
+                toggle.clicked.connect(
+                    lambda _checked=False, label=abstract, button=toggle, short=collapsed, full=abstract_text:
+                    self.toggle_abstract(label, button, short, full)
+                )
+                column.addWidget(toggle, alignment=Qt.AlignmentFlag.AlignLeft)
         footer = QHBoxLayout()
         date_label = paper_date_label(paper)
         meta = QLabel(f"{paper.get('source_name', '')}  ·  {date_label}")
         meta.setObjectName("paperMeta")
         footer.addWidget(meta)
         footer.addStretch()
-        translate = make_button("已翻译" if translation.text() else "译为中文")
+        translate_label = "译为英文" if target_language == "en" else "译为中文"
+        translate = make_button("已翻译" if translation.text() else translate_label)
         translate.setEnabled(not bool(translation.text()))
         translate.clicked.connect(lambda _checked=False, item=paper: self.translate_paper(item))
         open_button = make_button("打开原文 ↗")
@@ -924,6 +938,11 @@ class MainWindow(QMainWindow):
         column.addLayout(footer)
         self.card_parts[paper["id"]] = (translation, translate)
         return card
+
+    def toggle_abstract(self, label: QLabel, button: QPushButton, collapsed: str, full: str) -> None:
+        expanded = button.text() == "收起摘要"
+        label.setText(collapsed if expanded else full)
+        button.setText("展开摘要" if expanded else "收起摘要")
 
     def load_more(self) -> None:
         self.visible_limit += 60
@@ -947,13 +966,14 @@ class MainWindow(QMainWindow):
             self.open_settings()
             return
         paper_id = paper["id"]
+        target_language = "en" if contains_cjk(paper.get("title", "")) else "zh"
         if paper_id in self.translation_workers:
             return
         parts = self.card_parts.get(paper_id)
         if parts:
             parts[1].setText("翻译中…")
             parts[1].setEnabled(False)
-        worker = TranslateWorker(paper_id, paper["title"], endpoint, model, key, settings.get("proxy", ""))
+        worker = TranslateWorker(paper_id, paper["title"], endpoint, model, key, settings.get("proxy", ""), target_language)
         self.translation_workers[paper_id] = worker
         worker.translated.connect(lambda _id, text, item=paper: self.translation_done(item, text))
         worker.failed.connect(lambda _id, error, item=paper: self.translation_failed(item, error))
@@ -962,7 +982,8 @@ class MainWindow(QMainWindow):
 
     def translation_done(self, paper: dict, text: str) -> None:
         settings = self.state["settings"]
-        key = translation_key(settings.get("api_endpoint", ""), settings.get("api_model", ""), paper["title"])
+        target_language = "en" if contains_cjk(paper.get("title", "")) else "zh"
+        key = translation_key(settings.get("api_endpoint", ""), settings.get("api_model", ""), paper["title"], target_language)
         self.state["translations"][key] = text
         try:
             save_state(self.state)
@@ -978,7 +999,7 @@ class MainWindow(QMainWindow):
     def translation_failed(self, paper: dict, error: str) -> None:
         parts = self.card_parts.get(paper["id"])
         if parts:
-            parts[1].setText("译为中文")
+            parts[1].setText("译为英文" if contains_cjk(paper.get("title", "")) else "译为中文")
             parts[1].setEnabled(True)
         self.status_label.setText("翻译失败：" + error)
         QMessageBox.warning(self, "翻译失败", error)

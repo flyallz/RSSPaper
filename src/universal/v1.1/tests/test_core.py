@@ -91,6 +91,26 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(captured["body"]["thinking"], {"type": "disabled"})
         self.assertEqual(captured["body"]["max_tokens"], 256)
 
+    def test_bidirectional_title_translation(self):
+        self.assertTrue(core.contains_cjk("人工智能教育"))
+        self.assertFalse(core.contains_cjk("Artificial intelligence in education"))
+        response = {"choices": [{"message": {"content": "AI-enabled learning"}}]}
+        captured = {}
+
+        class FakeOpener:
+            def open(self, request, timeout):
+                captured["body"] = json.loads(request.data.decode("utf-8"))
+                return io.BytesIO(json.dumps(response).encode("utf-8"))
+
+        with patch.object(core, "_opener", return_value=FakeOpener()):
+            result = core.translate_title("人工智能教育", "https://api.deepseek.com/chat/completions", "deepseek-flash", "test-only", target_language="en")
+        self.assertEqual(result, "AI-enabled learning")
+        self.assertIn("翻译为英文", captured["body"]["messages"][0]["content"])
+        self.assertNotEqual(
+            core.translation_key("endpoint", "model", "title", "zh"),
+            core.translation_key("endpoint", "model", "title", "en"),
+        )
+
     def test_dpapi_key_roundtrip(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "key.bin"
