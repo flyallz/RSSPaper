@@ -1,4 +1,4 @@
-name: Package Windows v1.3
+name: Package Windows v1.3.1
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   package:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[publish-windows-v1.3]')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[publish-windows-v1.3.1]')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
           Push-Location "src/universal/v1.1"
           python -m unittest discover -s tests -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $dist = Join-Path $env:RUNNER_TEMP "dist-v1.3"
+          $dist = Join-Path $env:RUNNER_TEMP "dist-v1.3.1"
           python -m PyInstaller --noconfirm --clean --distpath $dist JournalRadar.spec
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $test = Start-Process -FilePath (Join-Path $dist 'JournalRadar/JournalRadar.exe') -ArgumentList '--self-test' -PassThru -Wait -WindowStyle Hidden
@@ -37,11 +37,11 @@ jobs:
           Copy-Item README.txt (Join-Path $dist 'JournalRadar/README.txt')
           Pop-Location
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
-          Compress-Archive -LiteralPath (Join-Path $dist 'JournalRadar') -DestinationPath "artifacts/JournalRadar-Universal-v1.3-Windows-Portable.zip" -Force
+          Compress-Archive -LiteralPath (Join-Path $dist 'JournalRadar') -DestinationPath "artifacts/JournalRadar-Universal-v1.3.1-Windows-Portable.zip" -Force
       - name: Publish release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $assets = @(Get-ChildItem artifacts/*.zip | ForEach-Object { $_.FullName })
-          gh release create v1.3-windows $assets --title '期刊雷达 Windows 通用版 · v1.3' --notes-file RELEASE_NOTES_V1.3.md --target $env:GITHUB_SHA
+          gh release create v1.3.1-windows $assets --title '期刊雷达 Windows 通用版 · v1.3.1' --notes-file RELEASE_NOTES_V1.3.1.md --target $env:GITHUB_SHA

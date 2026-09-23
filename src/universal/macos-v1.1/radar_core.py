@@ -296,8 +296,9 @@ def parse_crossref(payload: bytes, source: dict) -> list[dict]:
                     pass
                 if date:
                     break
+        abstract = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", str(item.get("abstract") or "")))).strip()
         if title and valid_http_url(link):
-            papers.append(_paper(source, title, link, date, precision))
+            papers.append(_paper(source, title, link, date, precision, abstract=abstract))
     return papers
 
 
@@ -338,7 +339,7 @@ def fetch_source(source: dict, proxy: str = "") -> list[dict]:
         papers = parse_rss(_read(source["value"], proxy), source)
     elif source["kind"] == "crossref":
         issn = normalize_issn(source["value"])
-        query = urlencode({"rows": 30, "sort": "published", "order": "desc", "select": "DOI,title,URL,published,published-online,published-print,issued"})
+        query = urlencode({"rows": 30, "sort": "published", "order": "desc", "select": "DOI,title,URL,abstract,published,published-online,published-print,issued"})
         url = "https://api.crossref.org/journals/" + quote(issn) + "/works?" + query
         papers = parse_crossref(_read(url, proxy), source)
     elif source["kind"] == "arxiv":
@@ -407,15 +408,16 @@ def translation_key(endpoint: str, model: str, title: str, target_language: str 
     return hashlib.sha256((endpoint + "|" + model + "|" + target_language + "|" + title).encode("utf-8")).hexdigest()
 
 
-def translate_title(title: str, endpoint: str, model: str, api_key: str, proxy: str = "", target_language: str = "zh") -> str:
+def translate_title(title: str, endpoint: str, model: str, api_key: str, proxy: str = "", target_language: str = "zh", content_type: str = "title") -> str:
     if not valid_api_endpoint(endpoint) or not model:
         raise ValueError("请在设置中填写翻译接口和模型")
     if not api_key and urlparse(endpoint).hostname not in ("localhost", "127.0.0.1", "::1"):
         raise ValueError("远程翻译接口需要 API 密钥")
+    subject = "摘要" if content_type == "abstract" else "标题"
     instruction = (
-        "将学术论文标题准确翻译为英文。只返回英文译题，不加解释。"
+        f"将学术论文{subject}准确翻译为英文。只返回英文译文，不加解释。"
         if target_language == "en"
-        else "将学术论文标题准确翻译为简体中文。只返回译题，不加解释。"
+        else f"将学术论文{subject}准确翻译为简体中文。只返回译文，不加解释。"
     )
     params: dict = {
         "model": model,
