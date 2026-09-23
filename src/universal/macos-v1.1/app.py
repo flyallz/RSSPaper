@@ -915,6 +915,7 @@ class MainWindow(QMainWindow):
         translation.setVisible(bool(translation.text()))
         column.addWidget(translation)
         abstract_text = paper.get("abstract", "").strip()
+        abstract_kind = paper.get("abstract_kind") or ("fragment" if abstract_text.endswith(("...", "…")) else ("metadata" if abstract_text.lower().startswith("publication date:") else ("full" if abstract_text else "missing")))
         if abstract_text:
             collapsed = abstract_text[:360] + ("…" if len(abstract_text) > 360 else "")
             abstract = QLabel(collapsed)
@@ -922,6 +923,10 @@ class MainWindow(QMainWindow):
             abstract.setWordWrap(True)
             abstract.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             column.addWidget(abstract)
+            if abstract_kind in ("fragment", "metadata"):
+                source_notice = QLabel("RSS 仅提供摘要片段" if abstract_kind == "fragment" else "RSS 仅提供出版信息，未提供论文摘要")
+                source_notice.setObjectName("notice")
+                column.addWidget(source_notice)
             abstract_target = "en" if contains_cjk(abstract_text) else "zh"
             abstract_key = translation_key(settings.get("api_endpoint", ""), settings.get("api_model", ""), "摘要：" + abstract_text, abstract_target)
             abstract_translation = QLabel(self.state["translations"].get(abstract_key, ""))
@@ -942,7 +947,9 @@ class MainWindow(QMainWindow):
             abstract_translate_label = "摘要译为英文" if abstract_target == "en" else "摘要译为中文"
             abstract_translate = make_button("摘要已翻译" if abstract_translation.text() else abstract_translate_label)
             abstract_translate.setObjectName("textAction")
-            abstract_translate.setEnabled(not bool(abstract_translation.text()))
+            abstract_translate.setEnabled(abstract_kind != "metadata" and not bool(abstract_translation.text()))
+            if abstract_kind == "metadata":
+                abstract_translate.setToolTip("当前 RSS 未提供摘要")
             abstract_translate.clicked.connect(lambda _checked=False, item=paper: self.translate_abstract(item))
             abstract_actions.addWidget(abstract_translate)
             abstract_actions.addStretch()

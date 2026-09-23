@@ -9,6 +9,7 @@ import os
 import re
 import ssl
 import tempfile
+import time
 import uuid
 import xml.etree.ElementTree as ET
 from datetime import date as calendar_date, datetime, timedelta, timezone
@@ -226,6 +227,8 @@ def _description_date(value: str) -> tuple[str, str, str]:
 
 
 def _paper(source: dict, title: str, link: str, date: str, precision: str = "", date_kind: str = "", abstract: str = "") -> dict:
+    abstract = abstract.strip()
+    abstract_kind = "fragment" if re.search(r"(?:\.\.\.|…)$", abstract) else ("metadata" if abstract.lower().startswith("publication date:") else ("full" if abstract else "missing"))
     return {
         "id": hashlib.sha256((source["id"] + "|" + link).encode("utf-8")).hexdigest(),
         "source_id": source["id"],
@@ -236,6 +239,7 @@ def _paper(source: dict, title: str, link: str, date: str, precision: str = "", 
         "date_precision": precision,
         "date_kind": date_kind,
         "abstract": abstract,
+        "abstract_kind": abstract_kind,
     }
 
 
@@ -327,10 +331,24 @@ def paper_matches_source(paper: dict, source: dict) -> bool:
 
 def _read(url: str, proxy: str, timeout: int = 22) -> bytes:
     request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/rss+xml, application/atom+xml, application/json, application/xml, text/xml, */*"})
-    with _opener(proxy).open(request, timeout=timeout) as response:
-        payload = response.read(MAX_DOWNLOAD + 1)
+    last_error = None
+    for attempt in range(3):
+        try:
+            with _opener(proxy).open(request, timeout=timeout) as response:
+                payload = response.read(MAX_DOWNLOAD + 1)
+            break
+        except HTTPError as error:
+            last_error = error
+            if error.code not in (429, 500, 502, 503, 504) or attempt == 2:
+                raise
+            delay = min(5, int(error.headers.get("Retry-After", "0") or 0) or (attempt + 1))
+            time.sleep(delay)
+    else:
+        raise last_error or ValueError("来源读取失败")
     if len(payload) > MAX_DOWNLOAD:
         raise ValueError("来源文件过大，已停止读取")
+    if b"Making sure you&#39;re not a bot" in payload or b"Making sure you're not a bot" in payload:
+        raise ValueError("来源站点要求浏览器验证，暂时无法自动读取；请稍后重试")
     return payload
 
 

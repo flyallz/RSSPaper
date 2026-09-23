@@ -22,4 +22,4 @@ APP="$ROOT/dist/universal-macos/JournalRadar.app"
 codesign --verify --deep --strict "$APP"
 mkdir -p "$ROOT/releases/macos"
 ditto -c -k --sequesterRsrc --keepParent "$APP" \
-  "$ROOT/releases/macos/JournalRadar-Universal-v1.3.1-Mac-arm64.zip"
+  "$ROOT/releases/macos/JournalRadar-Universal-v1.3.2-Mac-arm64.zip"
