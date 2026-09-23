@@ -12,6 +12,7 @@ from PySide6.QtCore import Qt, QThread, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QFont, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QAbstractSpinBox,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -376,7 +377,8 @@ class SettingsDialog(QDialog):
         self.key_path = data_dir() / "api-key.bin"
         self.test_worker: TranslateWorker | None = None
         self.setWindowTitle("应用设置")
-        self.setMinimumWidth(610)
+        self.resize(820, 610)
+        self.setMinimumWidth(740)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(25, 23, 25, 22)
         layout.setSpacing(14)
@@ -387,8 +389,14 @@ class SettingsDialog(QDialog):
         intro.setObjectName("pageSubtitle")
         intro.setWordWrap(True)
         layout.addWidget(intro)
-        form = QFormLayout()
-        form.setSpacing(13)
+        panel = QFrame()
+        panel.setObjectName("formCard")
+        form = QFormLayout(panel)
+        form.setContentsMargins(24, 22, 24, 22)
+        form.setHorizontalSpacing(22)
+        form.setVerticalSpacing(16)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.endpoint = QLineEdit(self.settings.get("api_endpoint", ""))
         self.endpoint.setPlaceholderText("https://api.deepseek.com/chat/completions")
         self.model = QLineEdit(self.settings.get("api_model", "deepseek-flash"))
@@ -404,13 +412,16 @@ class SettingsDialog(QDialog):
         self.minutes.setSingleStep(5)
         self.minutes.setSuffix(" 分钟")
         self.minutes.setValue(int(self.settings.get("refresh_minutes", 30)))
+        self.minutes.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        for field in (self.endpoint, self.model, self.key_edit, self.proxy, self.minutes):
+            field.setMinimumWidth(480)
         form.addRow("翻译接口完整地址", self.endpoint)
         form.addRow("模型名称", self.model)
         form.addRow("API 密钥", self.key_edit)
         form.addRow("", self.clear_key)
         form.addRow("网络代理", self.proxy)
         form.addRow("自动刷新间隔", self.minutes)
-        layout.addLayout(form)
+        layout.addWidget(panel)
         self.test_label = QLabel("密钥保存在此 Mac 的钥匙串；本地翻译接口可留空。")
         self.test_label.setObjectName("notice")
         self.test_label.setWordWrap(True)
