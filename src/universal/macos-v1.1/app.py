@@ -1066,6 +1066,9 @@ def self_test() -> int:
 
     source = create_source("示例", "rss", "https://example.org/feed.xml")
     papers = parse_rss(b"<rss><channel><item><title>Sample paper</title><link>https://example.org/paper</link></item></channel></rss>", source)
+    # Exercise the same secret-store import and Keychain lookup used while the
+    # settings window is initialized. This catches frozen-build omissions.
+    load_api_key(data_dir() / "api-key.bin")
     return 0 if len(papers) == 1 and papers[0]["title"] == "Sample paper" else 1
 
 

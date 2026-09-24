@@ -1,5 +1,6 @@
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from datetime import date
@@ -137,22 +138,24 @@ class CoreTests(unittest.TestCase):
         )
 
     def test_keychain_key_roundtrip_without_writing_to_disk(self):
-        class FakeKeyring:
-            def __init__(self):
-                self.values = {}
+        stored = {"value": ""}
 
-            def set_password(self, service, account, password):
-                self.values[service, account] = password
-
-            def get_password(self, service, account):
-                return self.values.get((service, account))
-
-            def delete_password(self, service, account):
-                del self.values[service, account]
+        def fake_security(command, *args):
+            if command == "find-generic-password":
+                if stored["value"]:
+                    return subprocess.CompletedProcess([], 0, stored["value"] + "\n", "")
+                return subprocess.CompletedProcess([], 44, "", "not found")
+            if command == "add-generic-password":
+                stored["value"] = args[-1]
+                return subprocess.CompletedProcess([], 0, "", "")
+            if command == "delete-generic-password":
+                stored["value"] = ""
+                return subprocess.CompletedProcess([], 0, "", "")
+            raise AssertionError(command)
 
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "key.bin"
-            with patch("secret_store._mac_keyring", return_value=FakeKeyring()):
+            with patch("secret_store._run_security", side_effect=fake_security):
                 self.assertEqual(load_api_key(path), "")
                 save_api_key(path, "sk-test-local-only")
                 self.assertEqual(load_api_key(path), "sk-test-local-only")

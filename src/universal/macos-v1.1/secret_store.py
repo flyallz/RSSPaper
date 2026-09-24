@@ -3,28 +3,39 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 
 SERVICE = "com.flyall.JournalRadar.Universal"
 ACCOUNT = "translation-api-key"
 
 
-def _mac_keyring():
-    # Select the native backend explicitly. Frozen apps cannot always discover
-    # keyring's entry points, and a fallback to a plaintext backend is unsafe.
-    from keyring.backends.macOS import Keyring
-
-    return Keyring()
+def _run_security(*args: str) -> subprocess.CompletedProcess[str]:
+    """Call macOS' built-in Keychain client without a Python runtime plugin."""
+    return subprocess.run(
+        ["/usr/bin/security", *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
 
 
 def save_api_key(path: Path, key: str) -> None:
     """Preserve the Windows function signature; never put the key at *path*."""
-    backend = _mac_keyring()
     if key:
-        backend.set_password(SERVICE, ACCOUNT, key)
-    elif backend.get_password(SERVICE, ACCOUNT) is not None:
-        backend.delete_password(SERVICE, ACCOUNT)
+        result = _run_security(
+            "add-generic-password", "-U", "-s", SERVICE, "-a", ACCOUNT, "-w", key
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "无法写入 macOS 钥匙串")
+    else:
+        _run_security("delete-generic-password", "-s", SERVICE, "-a", ACCOUNT)
 
 
 def load_api_key(path: Path) -> str:
     """Read the key from Keychain, returning an empty string when absent."""
-    return _mac_keyring().get_password(SERVICE, ACCOUNT) or ""
+    result = _run_security(
+        "find-generic-password", "-s", SERVICE, "-a", ACCOUNT, "-w"
+    )
+    if result.returncode != 0:
+        return ""
+    return result.stdout.rstrip("\r\n")
