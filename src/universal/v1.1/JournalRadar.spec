@@ -3,17 +3,19 @@
 from pathlib import Path
 import PySide6
 
+SOURCE_ROOT = Path(SPECPATH).parents[1]
+
 
 a = Analysis(
     ['app.py'],
-    pathex=[],
+    pathex=[str(SOURCE_ROOT)],
     binaries=[],
     datas=[('assets\\icon.svg', 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=["journal_radar.platform.macos_keychain"],
     noarchive=False,
     optimize=0,
 )

@@ -1,3 +1,2 @@
-# Tests
-
-Run the Mac core tests from `src/universal/macos-v1.1` with `python -m unittest discover -s tests -v`.
+Shared tests live at the repository root in tests/. Both platforms run the same suite.
+See docs/代码架构与维护说明.md for commands and platform-specific tests.

@@ -1,15 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+SOURCE_ROOT = Path(SPECPATH).parents[1]
+import sys
+sys.path.insert(0, str(SOURCE_ROOT))
+from journal_radar.config import VERSION
+
 a = Analysis(
     ['app.py'],
-    pathex=[],
+    pathex=[str(SOURCE_ROOT)],
     binaries=[],
     datas=[('assets/icon.svg', 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=["journal_radar.platform.windows_dpapi"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
@@ -43,8 +50,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName': '期刊雷达',
         'CFBundleDisplayName': '期刊雷达 · 通用版',
-        'CFBundleShortVersionString': '1.3.3',
-        'CFBundleVersion': '1.3.3',
+        'CFBundleShortVersionString': VERSION,
+        'CFBundleVersion': VERSION,
         'LSMinimumSystemVersion': '13.0',
         'NSHighResolutionCapable': True,
     },
