@@ -11,7 +11,7 @@ PACKAGE = ROOT / "src/journal_radar"
 class ArchitectureTests(unittest.TestCase):
     def test_domain_is_independent_of_ui_network_storage_and_platform(self):
         for path in (PACKAGE / "domain").glob("*.py"):
-            for node in ast.walk(ast.parse(path.read_text())):
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
                 if isinstance(node, ast.ImportFrom):
                     self.assertLessEqual(node.level, 1, str(path))
                     module = node.module or ""
@@ -25,7 +25,7 @@ class ArchitectureTests(unittest.TestCase):
     def test_business_and_adapters_do_not_import_widgets(self):
         for folder in ("services", "adapters", "platform"):
             for path in (PACKAGE / folder).glob("*.py"):
-                for node in ast.walk(ast.parse(path.read_text())):
+                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
                     if isinstance(node, (ast.Import, ast.ImportFrom)):
                         module = (
                             node.module
@@ -37,7 +37,7 @@ class ArchitectureTests(unittest.TestCase):
     def test_both_launchers_use_the_same_application(self):
         for folder in ("macos-v1.1", "v1.1"):
             path = ROOT / "src/universal" / folder / "app.py"
-            tree = ast.parse(path.read_text())
+            tree = ast.parse(path.read_text(encoding="utf-8"))
             self.assertTrue(
                 any(
                     isinstance(node, ast.ImportFrom) and node.module == "journal_radar.app"

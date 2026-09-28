@@ -54,6 +54,7 @@ class MainWindow(QMainWindow):
         self.translation_workers: dict[str, TranslateWorker] = {}
         self.card_parts: dict[str, tuple[QLabel, QPushButton]] = {}
         self.abstract_parts: dict[str, tuple[QLabel, QPushButton]] = {}
+        self.card_cache_keys: dict[str, str] = {}
         self.visible_limit = 60
         self.setWindowTitle(APP_NAME + " · 通用版")
         icon = resource_path("assets/icon.svg")
@@ -185,6 +186,7 @@ class MainWindow(QMainWindow):
     def open_settings(self) -> None:
         dialog = SettingsDialog(self.state, self, self.repository)
         if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.render_papers()
             self.view.status_label.setText("设置已保存。翻译只会在点击论文的按钮后执行。")
 
     def refresh(self) -> None:
@@ -250,6 +252,7 @@ class MainWindow(QMainWindow):
     def clear_cards(self) -> None:
         self.card_parts.clear()
         self.abstract_parts.clear()
+        self.card_cache_keys.clear()
         while self.view.paper_layout.count():
             item = self.view.paper_layout.takeAt(0)
             widget = item.widget()
@@ -305,8 +308,14 @@ class MainWindow(QMainWindow):
         card.title_requested.connect(lambda: self.translate_paper(paper))
         card.abstract_requested.connect(lambda: self.translate_abstract(paper))
         self.card_parts[paper["id"]] = card.title_parts
+        self.card_cache_keys[paper["id"] + ":title"] = TranslationJob.from_settings(
+            paper["title"], self.state["settings"]
+        ).cache_key
         if card.abstract_parts:
             self.abstract_parts[paper["id"]] = card.abstract_parts
+            self.card_cache_keys[paper["id"] + ":abstract"] = TranslationJob.from_settings(
+                paper.get("abstract", "").strip(), self.state["settings"], "abstract"
+            ).cache_key
         return card
 
     def load_more(self) -> None:
@@ -381,21 +390,26 @@ class MainWindow(QMainWindow):
     def translation_done(self, paper: Paper, text: str, job: TranslationJob) -> None:
         content_type = job.content_type
         self.state["translations"][job.cache_key] = text
+        save_error = ""
         try:
             self.repository.save(self.state)
         except Exception as error:
-            self.view.status_label.setText("译文已生成，但缓存保存失败：" + compact_error(error))
-            return
+            save_error = compact_error(error)
         current_job = TranslationJob.from_settings(job.text, self.state["settings"], content_type)
         parts = (self.abstract_parts if content_type == "abstract" else self.card_parts).get(
             paper["id"]
         )
-        if parts and current_job.cache_key == job.cache_key:
+        displayed_key = self.card_cache_keys.get(paper["id"] + ":" + content_type)
+        if parts and current_job.cache_key == job.cache_key and displayed_key == job.cache_key:
             parts[0].setText(text)
             parts[0].show()
             parts[1].setText("摘要已翻译" if content_type == "abstract" else "已翻译")
+        elif parts:
+            self.render_papers()
         self.view.status_label.setText(
-            "摘要译文已生成并缓存。" if content_type == "abstract" else "译题已生成并缓存。"
+            "译文已生成，但缓存保存失败：" + save_error
+            if save_error
+            else ("摘要译文已生成并缓存。" if content_type == "abstract" else "译题已生成并缓存。")
         )
 
     def translation_failed(

@@ -104,3 +104,41 @@ class UiTests(unittest.TestCase):
             worker.run()
         self.assertEqual(events, ["学习"])
         self.assertEqual(worker.api_key, "")
+
+    def test_refreshed_abstract_does_not_display_a_previous_text_translation(self):
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            patch.dict(os.environ, JOURNAL_RADAR_HOME=folder),
+        ):
+            window = MainWindow()
+            source = create_source("Example", "rss", "https://example.org/rss")
+            paper = make_paper(
+                source, "Learning", "https://example.org/p", "", abstract="Old abstract"
+            )
+            old_job = TranslationJob.from_settings(
+                paper["abstract"], window.state["settings"], "abstract"
+            )
+            paper["abstract"] = "Updated abstract"
+            window.state["papers"][window.state["active_profile_id"]] = [paper]
+            window.render_papers()
+            window.translation_done(paper, "旧摘要译文", old_job)
+            self.assertEqual(window.abstract_parts[paper["id"]][0].text(), "")
+            self.assertEqual(window.state["translations"][old_job.cache_key], "旧摘要译文")
+            window.close()
+
+    def test_failed_cache_write_still_displays_translation_and_reports_failure(self):
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            patch.dict(os.environ, JOURNAL_RADAR_HOME=folder),
+        ):
+            window = MainWindow()
+            source = create_source("Example", "rss", "https://example.org/rss")
+            paper = make_paper(source, "Learning", "https://example.org/p", "")
+            card = window.make_paper_card(paper)
+            job = TranslationJob.from_settings(paper["title"], window.state["settings"])
+            with patch.object(window.repository, "save", side_effect=OSError("disk full")):
+                window.translation_done(paper, "学习", job)
+            self.assertEqual(card.title_parts[0].text(), "学习")
+            self.assertIn("缓存保存失败", window.view.status_label.text())
+            window.close()
+            card.close()

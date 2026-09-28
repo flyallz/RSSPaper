@@ -10,4 +10,5 @@ def compact_error(error: Exception) -> str:
         return f"HTTP {error.code}：来源拒绝了请求"
     if isinstance(error, URLError):
         return f"连接失败：{error.reason}"
-    return str(error).splitlines()[0][:180]
+    lines = str(error).splitlines()
+    return lines[0][:180] if lines else type(error).__name__
