@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "journal-radar"
+dynamic = ["version"]
+description = "Cross-platform scholarly RSS reader"
+requires-python = ">=3.12"
+dependencies = ["PySide6==6.11.1", "certifi==2026.7.22"]
+
+[project.optional-dependencies]
+dev = ["ruff==0.16.9", "pyinstaller==6.16.0"]
+
+[project.scripts]
+journal-radar = "journal_radar.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["journal_radar*"]
+
+[tool.setuptools.package-data]
+journal_radar = ["assets/*.svg"]
+
+[tool.setuptools.dynamic]
+version = {attr = "journal_radar.config.VERSION"}
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+include = ["src/journal_radar/**/*.py", "tests/**/*.py", "scripts/build-universal.py"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/journal_radar/core.py" = ["F401"]

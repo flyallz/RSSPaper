@@ -11,3 +11,5 @@ build/
 api-key.bin
 state.json
 *.log
+*.egg-info/
+.ruff_cache/

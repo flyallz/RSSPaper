@@ -1,14 +1,13 @@
-Windows 11 / Python 3.12 构建说明
-==============================
+Windows 通用版构建入口
+====================
 
-安装 requirements.txt 后，在本目录运行：
-  python -m unittest discover -s tests -v
-  python -m PyInstaller --noconfirm --clean JournalRadar.spec
+当前实现统一在仓库的 src/journal_radar。本目录仅保留兼容启动器和 Windows 打包规格。
+请保留完整仓库，不要只复制本目录源码。
 
-产物位于 dist\JournalRadar\JournalRadar.exe。打包规格文件会排除构建机上可能混入的 Poppler ICU DLL，并将与 PySide6 匹配的 VC 运行库放在程序根目录。请保留整个 dist\JournalRadar 文件夹。
+从仓库根目录，在 Python 3.12/3.13 虚拟环境中运行：
+  python -m pip install -r requirements-build.txt
+  python scripts/build-universal.py
 
-如需验证：
-  dist\JournalRadar\JournalRadar.exe --self-test
-  dist\JournalRadar\JournalRadar.exe --gui-smoke
-
-运行数据默认位于 %APPDATA%\JournalRadar；测试时可设置 JOURNAL_RADAR_HOME 到单独目录，避免读写个人配置。
+脚本运行共享测试、PyInstaller 打包、冻结程序自检和界面启动检查。
+产物位于 dist/artifacts，并附 SHA-256 校验文件。
+详细说明见 docs/代码架构与维护说明.md。

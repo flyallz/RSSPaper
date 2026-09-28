@@ -1,26 +1,60 @@
 # RSSPaper · 期刊雷达
 
-原项目是围绕《教育技术学》培养方案的期刊阅读小卡片，保留原有 Mac、Windows 和 OPML 版本。跨学科通用版支持 Mac 和 Windows：可为不同学科建立工作区，订阅 RSS/Atom 或 Crossref ISSN 来源，自定义刷新间隔，并在点击论文按钮后才翻译英文标题。
+跨学科论文订阅工具，支持 Windows 和 Apple 芯片 Mac。可建立多个学科工作区，
+订阅 RSS/Atom、Crossref ISSN 或 arXiv 检索来源，按标题和摘要设置包含/排除关键词，
+展开摘要，并按需进行中文与英文的标题、摘要翻译。
 
-| 平台 | 推荐版本 | 下载与说明 |
-| --- | --- | --- |
-| Windows 10/11 · 跨学科 | 通用版 v1.1 | [Windows 版本合集](https://github.com/flyallz/RSSPaper/releases/tag/v1.1)；解压 ZIP，运行 `JournalRadar/JournalRadar.exe` |
-| macOS 13+ · Apple 芯片 · 跨学科 | 通用版 v1.1 | [下载 Mac ZIP](https://github.com/flyallz/RSSPaper/releases/download/v1.1/JournalRadar-Universal-v1.1-Mac-arm64.zip)；[使用说明](src/universal/macos-v1.1/README.md) |
-| Windows 10/11 · 教育技术 | PowerShell 版 v1.5 | [Windows 版本合集](https://github.com/flyallz/RSSPaper/releases/tag/v1.1)；解压 ZIP，运行 `Start-Radar.cmd` |
-| macOS 15+（Apple 芯片） | [v1.3](releases/macos/教育技术期刊雷达-Mac-v1.3.zip) | [Mac 说明](docs/桌面小卡片使用说明.md) |
-| Inoreader / Zotero | [OPML](data/edtech-radar.opml) | [订阅说明](docs/订阅说明.md) |
+已发布安装包见 [GitHub Releases](https://github.com/flyallz/RSSPaper/releases)。
+当前源码进入 v1.4.0：Windows 和 Mac 共用一套实现，历史版本入口继续保留。
+正式安装包以 Releases 页面为准，未发布的源码版本不代表已有对应正式安装包。
 
-Windows 历史版本的代码分别位于 `src/legacy/v1.2`～`v1.5`；跨学科 Windows 通用版位于 `src/universal/v1.0`、`v1.1`，Mac 对应版位于 `src/universal/macos-v1.1`。原 Mac v1.0、v1.2、v1.3 安装包仍保存在 `releases/macos/`，源码在 `src/macos/`；Windows v1.2、v1.3 原安装包仍保存在 `releases/windows/`。原有 [21 本期刊核对表](docs/21本期刊核对表.html)、[期刊目录](data/journal-catalog.json) 与 [验证记录](data/验证记录.json) 未改动。
+## 使用与数据
 
-## 日期修复（Windows 通用版 v1.1）
+- Windows：解压完整 ZIP，运行 JournalRadar/JournalRadar.exe，保留 _internal 文件夹。
+- Mac：解压 ZIP，将 JournalRadar.app 放入应用程序。当前构建面向 Apple 芯片 macOS 13+。
+- 点击“新建学科”和“管理期刊来源”添加订阅，也可导入 OPML。
+- 网络代理、翻译接口、模型与刷新间隔在“翻译与网络设置”配置。
+- 翻译仅在用户点击时请求第三方接口，可能产生费用；用户自行填写有效模型名称。
+- 中文标题/摘要可译为英文，其他标题/摘要可译为中文。来源没有完整摘要时，程序不会补造摘要。
+- 来源只有月份/年份的日期会保留原始精度；近 7/30 天筛选仅包括精确日期。
 
-ScienceDirect 的部分 RSS 条目不提供独立日期标签，而是在简介中写 `Publication date: January 2027` 或 `Publication date: Available online 28 August 2026`。v1.1 会识别这两种格式：前者只显示月份，不虚构具体某一天；后者显示精确在线发表日期。Crossref 仅提供月份或年份时也保留原始精度。近 7/30 天筛选只针对有精确日期的论文；仅有月份的论文可在“全部时间”查看。升级后点击“刷新来源”即可更新现有缓存和日期，不影响已保存的标题翻译。
+Windows 数据位于 %APPDATA%/JournalRadar；Mac 位于 ~/Library/Application Support/JournalRadar。
+两端配置文件保持 schema 1 兼容。密钥分别使用 Windows DPAPI、Mac 钥匙串保存，
+不能通过复制 state.json 跨平台迁移密钥。损坏配置的会话禁止覆盖原文件。
 
-## 各版源码与构建
+## 当前代码与开发
 
-- Mac SwiftUI 源码：`src/macos/main.swift`；`scripts/build-macos.sh` 构建，`scripts/test-macos.sh` 测试。
-- 原 Windows PowerShell/WPF 源码：`src/windows/`；各历史快照在 `src/legacy/`。
-- 通用 Windows Python/PySide6 源码：`src/universal/`；v1.1 的构建说明在 `src/universal/v1.1/BUILD.txt`。GitHub Actions 的 Windows 工作流用于生成所有 Windows 版本的下载 ZIP。
-- 通用 Mac Python/PySide6 源码：`src/universal/macos-v1.1/`；`scripts/build-universal-macos.sh` 构建并验证 `.app`。Mac 数据存于 `~/Library/Application Support/JournalRadar`，API 密钥存于本机钥匙串。
+公共实现位于 src/journal_radar，分为界面、业务、来源接入、领域模型、存储与平台模块。
+src/universal/v1.1 和 macos-v1.1 是兼容启动入口与平台打包规格，不再各自维护业务代码。
 
-本仓库只包含程序源码、默认订阅清单和构建配置，不包含用户 API 密钥、个人配置、缓存论文或日志。通用版默认数据位于 `%APPDATA%\JournalRadar`，原版位于 `%APPDATA%\EdTechRadar`，互不覆盖。翻译请求只在用户点击按钮时发送，第三方接口可能收费。
+- [架构与维护说明](docs/代码架构与维护说明.md)：模块职责、数据兼容、会议来源扩展步骤。
+- [贡献约定](CONTRIBUTING.md)：代码组织与合并前检查。
+- [v1.4.0 变更](docs/版本说明-v1.4.0.md)。
+
+在 Python 3.12/3.13 虚拟环境中安装根目录 requirements-build.txt 后：
+
+```sh
+PYTHONPATH=src python -m journal_radar
+python -m ruff check .
+python -m ruff format --check .
+PYTHONPATH=src QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v
+python scripts/build-universal.py
+```
+
+Windows PowerShell 环境变量写法、平台测试与发布步骤见维护说明。
+构建产物和 SHA-256 位于 dist/artifacts。GitHub Actions 在 Mac 和 Windows 上检查、测试、打包，
+发布流程手动触发并默认生成草稿。正式代码签名和 Apple 公证仍需要开发者证书。
+
+## 历史资料
+
+原 Mac SwiftUI 源码在 src/macos；原 Windows PowerShell/WPF 源码在 src/windows 和 src/legacy。
+原通用版 v1.0 快照在 src/universal/v1.0。历史安装包保留在 releases 中，新安装包由构建产出。
+
+原教育技术培养方案资料仍可使用：
+
+- [OPML 订阅清单](data/edtech-radar.opml)
+- [订阅说明](docs/订阅说明.md)
+- [21 本期刊核对表](docs/21本期刊核对表.html)
+- [期刊目录](data/journal-catalog.json)
+
+仓库不包含真实用户 API 密钥、个人配置或论文缓存。

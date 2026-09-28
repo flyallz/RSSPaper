@@ -1,0 +1,54 @@
+"""Workers for both desktop platforms."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+
+from PySide6.QtCore import QThread, Signal
+
+from ..domain.models import ContentType, Language, Source
+from ..errors import compact_error
+from ..services import TranslationJob, refresh_sources
+
+
+class RefreshWorker(QThread):
+    progress = Signal(str)
+    loaded = Signal(object, object)
+
+    def __init__(self, sources: list[Source], proxy: str):
+        super().__init__()
+        self.sources = deepcopy(sources)
+        self.proxy = proxy
+
+    def run(self) -> None:
+        papers, statuses = refresh_sources(self.sources, self.proxy, self.progress.emit)
+        self.loaded.emit(papers, statuses)
+
+
+class TranslateWorker(QThread):
+    translated = Signal(str, str)
+    failed = Signal(str, str)
+
+    def __init__(
+        self,
+        paper_id: str,
+        title: str,
+        endpoint: str,
+        model: str,
+        api_key: str,
+        proxy: str,
+        target_language: Language = "zh",
+        content_type: ContentType = "title",
+    ):
+        super().__init__()
+        self.paper_id = paper_id
+        self.job = TranslationJob(title, endpoint, model, proxy, content_type, target_language)
+        self.api_key = api_key
+
+    def run(self) -> None:
+        try:
+            self.translated.emit(self.paper_id, self.job.execute(self.api_key))
+        except Exception as error:
+            self.failed.emit(self.paper_id, compact_error(error))
+        finally:
+            self.api_key = ""
