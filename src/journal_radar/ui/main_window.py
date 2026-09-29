@@ -58,6 +58,8 @@ class MainWindow(QMainWindow):
         self.card_parts: dict[str, tuple[QLabel, QPushButton]] = {}
         self.abstract_parts: dict[str, tuple[QLabel, QPushButton]] = {}
         self.card_cache_keys: dict[str, str] = {}
+        self.reading_revision = 0
+        self.pending_reading_anchor = None
         self.visible_limit = 60
         self.setWindowTitle(APP_NAME + " · 通用版")
         icon = resource_path("assets/icon.svg")
@@ -264,11 +266,13 @@ class MainWindow(QMainWindow):
             item = self.view.paper_layout.takeAt(0)
             widget = item.widget()
             if widget:
+                widget.hide()
                 widget.deleteLater()
 
     def render_papers(self) -> None:
         if not hasattr(self, "view"):
             return
+        self.reading_revision += 1
         profile = current_profile(self.state)
         papers = self.state["papers"].get(profile["id"], [])
         query = self.view.search.text().strip().casefold()
@@ -309,6 +313,74 @@ class MainWindow(QMainWindow):
             more = make_button(f"加载更多 · 还剩 {len(visible) - self.visible_limit} 条")
             more.clicked.connect(self.load_more)
             self.view.paper_layout.addWidget(more)
+
+    def preserve_reading_position(self, update: Callable[[], None]) -> None:
+        """Anchor to the visible paper, not a pixel value changed by growing cards."""
+        layout = self.view.paper_layout
+        layout.activate()
+        scroll = self.view.paper_scroll.verticalScrollBar()
+        anchor = None
+        for index in range(layout.count()):
+            card = layout.itemAt(index).widget()
+            if isinstance(card, PaperCard) and card.y() + card.height() > scroll.value():
+                anchor = (card.paper_id, card.y() - scroll.value())
+                break
+        profile_id = current_profile(self.state)["id"]
+        pending = self.pending_reading_anchor
+        if pending and pending[:2] == (self.reading_revision, profile_id):
+            if pending[3] == scroll.value():
+                # Several workers can finish before Qt relays out the list.
+                anchor = pending[2]
+        self.reading_revision += 1
+        revision = self.reading_revision
+        self.pending_reading_anchor = (revision, profile_id, anchor, scroll.value())
+        update()
+
+        def restore() -> None:
+            if revision != self.reading_revision or current_profile(self.state)["id"] != profile_id:
+                return
+            pending = self.pending_reading_anchor
+            self.pending_reading_anchor = None
+            if pending and scroll.value() != pending[3]:
+                # Respect a new user scroll made before the deferred restore runs.
+                return
+            layout.activate()
+            if anchor:
+                for index in range(layout.count()):
+                    card = layout.itemAt(index).widget()
+                    if isinstance(card, PaperCard) and card.paper_id == anchor[0]:
+                        scroll.setValue(card.y() - anchor[1])
+                        break
+
+        # Qt calculates wrapped-label heights after the content changes.
+        QTimer.singleShot(0, lambda: QTimer.singleShot(0, restore))
+
+    def update_paper_card(self, paper_id: str) -> None:
+        """Replace only the changed card; leave other papers' reading state intact."""
+        papers = self.state["papers"].get(current_profile(self.state)["id"], [])
+        paper = next((item for item in papers if item["id"] == paper_id), None)
+        if paper is None:
+            return
+        layout = self.view.paper_layout
+        for index in range(layout.count()):
+            old = layout.itemAt(index).widget()
+            if not isinstance(old, PaperCard) or old.paper_id != paper_id:
+                continue
+
+            def replace() -> None:
+                expanded = bool(old.abstract_toggle and old.abstract_toggle.isChecked())
+                new = self.make_paper_card(paper)
+                if expanded and new.abstract_toggle:
+                    new.abstract_toggle.setChecked(True)
+                item = layout.takeAt(index)
+                old.hide()
+                old.deleteLater()
+                del item
+                layout.insertWidget(index, new)
+
+            self.preserve_reading_position(replace)
+            return
+        # The paper may have been excluded by an active filter. Do not change that filter.
 
     def make_paper_card(self, paper: Paper) -> PaperCard:
         card = PaperCard(paper, self.state["settings"], self.state["translations"])
@@ -353,7 +425,13 @@ class MainWindow(QMainWindow):
         worker.loaded.connect(lambda result: self.abstract_done(job, result))
         worker.failed.connect(lambda error: self.abstract_done(job, error=error))
         worker.finished.connect(lambda: self.abstract_finished(key))
-        self.render_papers()
+        for index in range(self.view.paper_layout.count()):
+            card = self.view.paper_layout.itemAt(index).widget()
+            if isinstance(card, PaperCard) and card.paper_id == paper["id"]:
+                if card.enrichment_button:
+                    card.enrichment_button.setText("正在获取摘要…")
+                    card.enrichment_button.setEnabled(False)
+                break
         self.view.status_label.setText("正在查询摘要，现有论文仍可阅读。")
         worker.start()
 
@@ -368,7 +446,7 @@ class MainWindow(QMainWindow):
         except Exception as failure:
             save_error = compact_error(failure)
         if current_profile(self.state)["id"] == job.profile_id:
-            self.render_papers()
+            self.update_paper_card(job.paper_id)
             self.view.status_label.setText(
                 "摘要结果未保存：" + save_error
                 if save_error
@@ -378,7 +456,13 @@ class MainWindow(QMainWindow):
     def abstract_finished(self, key: tuple[str, str]) -> None:
         self.abstract_workers.pop(key, None)
         if current_profile(self.state)["id"] == key[0]:
-            self.render_papers()
+            for index in range(self.view.paper_layout.count()):
+                card = self.view.paper_layout.itemAt(index).widget()
+                if isinstance(card, PaperCard) and card.paper_id == key[1]:
+                    if card.enrichment_button:
+                        card.enrichment_button.setText("获取完整摘要")
+                        card.enrichment_button.setEnabled(True)
+                    break
 
     def load_more(self) -> None:
         self.visible_limit += 60
@@ -448,8 +532,10 @@ class MainWindow(QMainWindow):
         worker.start()
 
     def translation_finished(self, worker_id: str) -> None:
-        self.translation_workers.pop(worker_id, None)
-        self.render_papers()
+        worker = self.translation_workers.pop(worker_id, None)
+        # A replaced abstract can be waiting for a translation of its previous text.
+        if worker and self.card_cache_keys.get(worker_id) != worker.job.cache_key:
+            self.update_paper_card(worker_id.rsplit(":", 1)[0])
 
     def translation_done(self, paper: Paper, text: str, job: TranslationJob) -> None:
         content_type = job.content_type
@@ -465,11 +551,16 @@ class MainWindow(QMainWindow):
         )
         displayed_key = self.card_cache_keys.get(paper["id"] + ":" + content_type)
         if parts and current_job.cache_key == job.cache_key and displayed_key == job.cache_key:
-            parts[0].setText(text)
-            parts[0].show()
-            parts[1].setText("摘要已翻译" if content_type == "abstract" else "已翻译")
+
+            def display_translation() -> None:
+                parts[0].setText(text)
+                parts[0].show()
+                parts[1].setText("摘要已翻译" if content_type == "abstract" else "已翻译")
+                parts[1].setEnabled(False)
+
+            self.preserve_reading_position(display_translation)
         elif parts:
-            self.render_papers()
+            self.update_paper_card(paper["id"])
         self.view.status_label.setText(
             "译文已生成，但缓存保存失败：" + save_error
             if save_error

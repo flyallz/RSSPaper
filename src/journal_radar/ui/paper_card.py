@@ -27,6 +27,8 @@ class PaperCard(QFrame):
     def __init__(self, paper: Paper, settings: Settings, translations: dict[str, str]):
         super().__init__()
         self.setObjectName("paperCard")
+        self.paper_id = paper["id"]
+        self.abstract_toggle = None
         self.abstract_parts = None
         self.enrichment_button = None
         column = QVBoxLayout(self)
@@ -38,6 +40,8 @@ class PaperCard(QFrame):
         translation.setVisible(bool(translation.text()))
         column.addWidget(translation)
         kind = paper_abstract_kind(paper)
+        self.abstract_actions = QHBoxLayout()
+        self.abstract_actions.setSpacing(18)
         if kind != "missing":
             self._add_abstract(column, paper, settings, translations)
         else:
@@ -49,15 +53,17 @@ class PaperCard(QFrame):
                 "通过 DOI 或唯一的标题匹配查询 Crossref；不保证每篇都有摘要"
             )
             self.enrichment_button.clicked.connect(self.enrichment_requested.emit)
-            column.addWidget(self.enrichment_button, alignment=Qt.AlignmentFlag.AlignLeft)
+            self.abstract_actions.insertWidget(0, self.enrichment_button)
+        self.abstract_actions.addStretch()
+        column.addLayout(self.abstract_actions)
         if paper.get("abstract_error"):
             column.addWidget(text_label("摘要补全：" + paper["abstract_error"], "notice"))
         footer = QHBoxLayout()
         meta = text_label(
             f"{paper.get('source_name', '')}  ·  {paper_date_label(paper)}", "paperMeta"
         )
-        footer.addWidget(meta)
-        footer.addStretch()
+        footer.addWidget(meta, 1)
+        footer.setSpacing(12)
         translate_label = "译为英文" if title_job.target_language == "en" else "译为中文"
         translate = make_button("已翻译" if translation.text() else translate_label)
         translate.setEnabled(not bool(translation.text()))
@@ -91,10 +97,11 @@ class PaperCard(QFrame):
         translation = text_label(translations.get(job.cache_key, ""), "translation")
         translation.setVisible(bool(translation.text()))
         column.addWidget(translation)
-        actions = QHBoxLayout()
+        actions = self.abstract_actions
         if len(text) > 360:
             toggle = make_button("展开摘要")
             toggle.setObjectName("textAction")
+            self.abstract_toggle = toggle
             toggle.setCheckable(True)
             toggle.toggled.connect(
                 lambda expanded: abstract.setText(text if expanded else collapsed)
@@ -109,8 +116,7 @@ class PaperCard(QFrame):
         translate.setEnabled(kind != "metadata" and not bool(translation.text()))
         if kind == "metadata":
             translate.setToolTip("当前 RSS 未提供摘要")
+            translate.hide()
         translate.clicked.connect(self.abstract_requested.emit)
         actions.addWidget(translate)
-        actions.addStretch()
-        column.addLayout(actions)
         self.abstract_parts = (translation, translate)

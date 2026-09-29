@@ -77,6 +77,7 @@ class UiTests(unittest.TestCase):
             profile = window.state["profiles"][0]
             profile["sources"] = [source]
             window.state["papers"][profile["id"]] = [paper]
+            window.render_papers()
             job = AbstractJob.for_paper(profile["id"], paper)
             window.abstract_done(job, error="出版社未提供摘要")
             card = window.view.paper_layout.itemAt(0).widget()
@@ -105,6 +106,7 @@ class UiTests(unittest.TestCase):
                 key, paper["abstract"], "", "model", "", "", content_type="abstract"
             )
             window.translation_workers[key] = worker
+            window.render_papers()
             job = AbstractJob.for_paper(profile["id"], paper)
             window.abstract_done(job, AbstractResult("新的完整中文摘要", "10.1000/a"))
             button = window.abstract_parts[paper["id"]][1]
