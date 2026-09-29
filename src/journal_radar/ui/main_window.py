@@ -105,11 +105,15 @@ class MainWindow(QMainWindow):
         self.view.profile_box.blockSignals(False)
         self.view.page_title.setText(profile["name"])
         self.view.delete_profile_button.setEnabled(len(self.state["profiles"]) > 1)
+        selected_source = self.view.source_filter.currentData() or ""
         self.view.source_filter.blockSignals(True)
         self.view.source_filter.clear()
         self.view.source_filter.addItem("全部期刊", "")
         for source in profile["sources"]:
             self.view.source_filter.addItem(source["name"], source["id"])
+        self.view.source_filter.setCurrentIndex(
+            max(0, self.view.source_filter.findData(selected_source))
+        )
         self.view.source_filter.blockSignals(False)
         self.view.source_stat[1].setText(str(len(profile["sources"])))
         self.view.paper_stat[1].setText(str(len(self.state["papers"].get(profile["id"], []))))
