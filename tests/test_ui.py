@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -9,10 +10,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
+from journal_radar.adapters.abstracts import AbstractResult
 from journal_radar.domain.papers import make_paper
 from journal_radar.domain.sources import create_source
 from journal_radar.domain.state import default_state
 from journal_radar.services import TranslationJob
+from journal_radar.services.abstracts import AbstractJob
 from journal_radar.storage import StateRepository
 from journal_radar.ui.main_window import MainWindow
 from journal_radar.ui.paper_card import PaperCard
@@ -25,6 +28,95 @@ class UiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.application = QApplication.instance() or QApplication([])
+
+    def test_missing_abstract_can_be_fetched_and_shown_by_background_worker(self):
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            patch.dict(os.environ, JOURNAL_RADAR_HOME=folder),
+        ):
+            window = MainWindow()
+            source = create_source("Example", "rss", "https://example.org/rss")
+            paper = make_paper(source, "Learning", "https://doi.org/10.1000/a", "")
+            profile = window.state["profiles"][0]
+            profile["sources"] = [source]
+            window.state["papers"][profile["id"]] = [paper]
+            window.render_papers()
+            card = window.view.paper_layout.itemAt(0).widget()
+            self.assertIsNotNone(card.enrichment_button)
+            self.assertIsNone(card.abstract_parts)
+            result = AbstractResult("An abstract about learning. " * 30, "10.1000/a")
+            with patch.object(AbstractJob, "execute", return_value=result):
+                card.enrichment_button.click()
+                self.assertEqual(len(window.abstract_workers), 1)
+                deadline = time.monotonic() + 3
+                while window.abstract_workers and time.monotonic() < deadline:
+                    self.application.processEvents()
+                    time.sleep(0.005)
+            self.assertFalse(window.abstract_workers)
+            updated = window.view.paper_layout.itemAt(0).widget()
+            self.assertIsNone(updated.enrichment_button)
+            self.assertTrue(updated.abstract_parts[1].isEnabled())
+            self.assertTrue(
+                any(button.text() == "展开摘要" for button in updated.findChildren(QPushButton))
+            )
+            self.assertEqual(
+                window.repository.load()["papers"][profile["id"]][0]["abstract"], result.text
+            )
+            window.close()
+
+    def test_failed_enrichment_explains_reason_and_reenables_retry(self):
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            patch.dict(os.environ, JOURNAL_RADAR_HOME=folder),
+        ):
+            window = MainWindow()
+            source = create_source("Example", "rss", "https://example.org/rss")
+            paper = make_paper(
+                source, "Learning", "https://example.org/p", "", abstract="A teaser…"
+            )
+            profile = window.state["profiles"][0]
+            profile["sources"] = [source]
+            window.state["papers"][profile["id"]] = [paper]
+            window.render_papers()
+            job = AbstractJob.for_paper(profile["id"], paper)
+            window.abstract_done(job, error="出版社未提供摘要")
+            card = window.view.paper_layout.itemAt(0).widget()
+            self.assertTrue(card.enrichment_button.isEnabled())
+            self.assertEqual(paper["abstract"], "A teaser…")
+            self.assertTrue(
+                any("出版社未提供摘要" in label.text() for label in card.findChildren(QLabel))
+            )
+            window.close()
+
+    def test_enrichment_waits_for_old_translation_then_offers_new_abstract_translation(self):
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            patch.dict(os.environ, JOURNAL_RADAR_HOME=folder),
+        ):
+            window = MainWindow()
+            source = create_source("Example", "rss", "https://example.org/rss")
+            paper = make_paper(
+                source, "Learning", "https://example.org/p", "", abstract="Old teaser…"
+            )
+            profile = window.state["profiles"][0]
+            profile["sources"] = [source]
+            window.state["papers"][profile["id"]] = [paper]
+            key = paper["id"] + ":abstract"
+            worker = TranslateWorker(
+                key, paper["abstract"], "", "model", "", "", content_type="abstract"
+            )
+            window.translation_workers[key] = worker
+            window.render_papers()
+            job = AbstractJob.for_paper(profile["id"], paper)
+            window.abstract_done(job, AbstractResult("新的完整中文摘要", "10.1000/a"))
+            button = window.abstract_parts[paper["id"]][1]
+            self.assertFalse(button.isEnabled())
+            self.assertEqual(button.text(), "等待之前的翻译…")
+            window.translation_finished(key)
+            button = window.abstract_parts[paper["id"]][1]
+            self.assertTrue(button.isEnabled())
+            self.assertEqual(button.text(), "摘要译为英文")
+            window.close()
 
     def test_card_expand_and_translate_actions_are_independent(self):
         state = default_state()

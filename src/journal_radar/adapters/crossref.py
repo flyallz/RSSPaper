@@ -8,7 +8,7 @@ import re
 from datetime import date as calendar_date
 
 from ..domain.models import Paper, Source
-from ..domain.papers import make_paper
+from ..domain.papers import abstract_kind, make_paper
 from ..domain.validation import valid_http_url
 
 
@@ -44,5 +44,20 @@ def parse_crossref(payload: bytes, source: Source) -> list[Paper]:
             r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", str(item.get("abstract") or "")))
         ).strip()
         if title and valid_http_url(link):
-            papers.append(make_paper(source, title, link, date, precision, abstract=abstract))
+            paper = make_paper(
+                source,
+                title,
+                link,
+                date,
+                precision,
+                abstract=abstract,
+                doi=doi,
+                abstract_source="Crossref",
+            )
+            names = item.get("container-title") or []
+            if isinstance(names, list) and names and isinstance(names[0], str):
+                paper["publication_name"] = html.unescape(names[0]).strip()
+            if abstract_kind(abstract) == "available":
+                paper["abstract_kind"] = "full"
+            papers.append(paper)
     return papers

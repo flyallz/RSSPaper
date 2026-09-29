@@ -149,7 +149,7 @@ class CoreTests(unittest.TestCase):
             )
         self.assertEqual(result, "跨学科学习")
         self.assertEqual(captured["body"]["thinking"], {"type": "disabled"})
-        self.assertEqual(captured["body"]["max_tokens"], 256)
+        self.assertEqual(captured["body"]["max_tokens"], 512)
 
     def test_bidirectional_title_translation(self):
         self.assertTrue(core.contains_cjk("人工智能教育"))

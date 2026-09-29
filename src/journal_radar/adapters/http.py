@@ -24,12 +24,13 @@ def build_http_opener(proxy: str):
     return build_opener(proxy_handler, HTTPSHandler(context=context))
 
 
-def read_bytes(url: str, proxy: str, timeout: int = 22) -> bytes:
+def read_bytes(url: str, proxy: str, timeout: int = 22, accept: str = "") -> bytes:
     request = Request(
         url,
         headers={
             "User-Agent": USER_AGENT,
-            "Accept": "application/rss+xml, application/atom+xml, application/json, application/xml, text/xml, */*",
+            "Accept": accept
+            or "application/rss+xml, application/atom+xml, application/json, application/xml, text/xml, */*",
         },
     )
     last_error = None

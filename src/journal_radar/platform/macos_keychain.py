@@ -16,7 +16,8 @@ DUPLICATE_ITEM = -25299
 
 
 class Keychain:
-    def __init__(self):
+    def __init__(self, account: str = ACCOUNT):
+        self.account = account
         self.security = ctypes.CDLL("/System/Library/Frameworks/Security.framework/Security")
         self.cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
         pointer = ctypes.c_void_p
@@ -93,7 +94,7 @@ class Keychain:
         return {
             "kSecClass": self._constant("kSecClassGenericPassword"),
             "kSecAttrService": SERVICE,
-            "kSecAttrAccount": ACCOUNT,
+            "kSecAttrAccount": self.account,
         }
 
     @staticmethod
@@ -141,14 +142,14 @@ class Keychain:
         self._check(status)
 
 
-@lru_cache(maxsize=1)
-def _keychain() -> Keychain:
-    return Keychain()
+@lru_cache(maxsize=2)
+def _keychain(account: str = ACCOUNT) -> Keychain:
+    return Keychain(account)
 
 
 def save_api_key(path: Path, key: str) -> None:
-    _keychain().save(key)
+    _keychain("easyscholar-key" if path.name == "easyscholar-key.bin" else ACCOUNT).save(key)
 
 
 def load_api_key(path: Path) -> str:
-    return _keychain().load()
+    return _keychain("easyscholar-key" if path.name == "easyscholar-key.bin" else ACCOUNT).load()

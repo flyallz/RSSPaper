@@ -6,6 +6,7 @@ import hashlib
 import re
 from datetime import date as calendar_date
 from datetime import timedelta
+from urllib.parse import unquote, urlparse
 
 from .models import Paper, Source
 
@@ -15,9 +16,29 @@ def abstract_kind(text: str) -> str:
     text = text.strip()
     if not text:
         return "missing"
-    if text.lower().startswith("publication date:"):
+    if re.match(r"^(?:publication date|source|authors?\(s\)|authors?)\s*:", text, re.I):
         return "metadata"
-    return "fragment" if re.search(r"(?:\.\.\.|…)$", text) else "full"
+    return "fragment" if re.search(r"(?:\.\.\.|…)[\s\"'”）)]*$", text) else "available"
+
+
+def normalize_doi(value: str) -> str:
+    """Accept an explicit DOI or resolver URL, never arbitrary article prose."""
+    value = unquote(value.strip())
+    parsed = urlparse(value)
+    if parsed.hostname in ("doi.org", "dx.doi.org"):
+        value = parsed.path.lstrip("/")
+    value = re.sub(r"^doi\s*:\s*", "", value, flags=re.I)
+    return value.lower() if re.fullmatch(r"10\.\d{4,9}/\S+", value) else ""
+
+
+def paper_abstract_kind(paper: Paper) -> str:
+    detected = abstract_kind(paper.get("abstract", ""))
+    if detected != "available":
+        return detected
+    # Old RSS caches used 'full' merely because no ellipsis was present.
+    if paper.get("abstract_kind") == "full" and paper.get("abstract_source"):
+        return "full"
+    return "available"
 
 
 def make_paper(
@@ -28,12 +49,15 @@ def make_paper(
     precision: str = "",
     date_kind: str = "",
     abstract: str = "",
+    doi: str = "",
+    abstract_source: str = "",
 ) -> Paper:
     abstract = abstract.strip()
     return {
         "id": hashlib.sha256((source["id"] + "|" + link).encode("utf-8")).hexdigest(),
         "source_id": source["id"],
         "source_name": source["name"],
+        "publication_name": source.get("publication_name", ""),
         "title": title,
         "url": link,
         "date": date,
@@ -41,6 +65,8 @@ def make_paper(
         "date_kind": date_kind,
         "abstract": abstract,
         "abstract_kind": abstract_kind(abstract),
+        "doi": normalize_doi(doi) or normalize_doi(link),
+        "abstract_source": abstract_source,
     }
 
 

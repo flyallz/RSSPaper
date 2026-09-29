@@ -9,9 +9,44 @@ from PySide6.QtCore import QThread, Signal
 from ..domain.models import ContentType, Language, Source
 from ..errors import compact_error
 from ..services import TranslationJob, refresh_sources
+from ..services.abstracts import AbstractJob
+from ..services.citations import CitationJob
 
 
-class RefreshWorker(QThread):
+class CancellableWorker(QThread):
+    """Keep cancellation intent even after Qt resets a finished thread's flag."""
+
+    def __init__(self):
+        super().__init__()
+        self.cancel_requested = False
+
+    def requestInterruption(self) -> None:
+        self.cancel_requested = True
+        super().requestInterruption()
+
+    def isInterruptionRequested(self) -> bool:
+        return self.cancel_requested or super().isInterruptionRequested()
+
+
+class AbstractWorker(CancellableWorker):
+    loaded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, job: AbstractJob):
+        super().__init__()
+        self.job = job
+
+    def run(self) -> None:
+        try:
+            result = self.job.execute(self.isInterruptionRequested)
+            if not self.isInterruptionRequested():
+                self.loaded.emit(result)
+        except Exception as error:
+            if not self.isInterruptionRequested():
+                self.failed.emit(compact_error(error))
+
+
+class RefreshWorker(CancellableWorker):
     progress = Signal(str)
     loaded = Signal(object, object)
 
@@ -21,11 +56,17 @@ class RefreshWorker(QThread):
         self.proxy = proxy
 
     def run(self) -> None:
-        papers, statuses = refresh_sources(self.sources, self.proxy, self.progress.emit)
-        self.loaded.emit(papers, statuses)
+        papers, statuses = refresh_sources(
+            self.sources,
+            self.proxy,
+            lambda text: self.progress.emit(text) if not self.isInterruptionRequested() else None,
+            self.isInterruptionRequested,
+        )
+        if not self.isInterruptionRequested():
+            self.loaded.emit(papers, statuses)
 
 
-class TranslateWorker(QThread):
+class TranslateWorker(CancellableWorker):
     translated = Signal(str, str)
     failed = Signal(str, str)
 
@@ -47,8 +88,51 @@ class TranslateWorker(QThread):
 
     def run(self) -> None:
         try:
-            self.translated.emit(self.paper_id, self.job.execute(self.api_key))
+            result = self.job.execute(self.api_key, self.isInterruptionRequested)
+            if not self.isInterruptionRequested():
+                self.translated.emit(self.paper_id, result)
         except Exception as error:
-            self.failed.emit(self.paper_id, compact_error(error))
+            if not self.isInterruptionRequested():
+                self.failed.emit(self.paper_id, compact_error(error))
         finally:
             self.api_key = ""
+
+
+class CitationWorker(CancellableWorker):
+    loaded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, job: CitationJob):
+        super().__init__()
+        self.job = job
+
+    def run(self) -> None:
+        try:
+            result = self.job.execute(self.isInterruptionRequested)
+            if not self.isInterruptionRequested():
+                self.loaded.emit(result)
+        except Exception as error:
+            if not self.isInterruptionRequested():
+                self.failed.emit(compact_error(error))
+
+
+class RankWorker(CancellableWorker):
+    loaded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, name, key, proxy=""):
+        super().__init__()
+        self.name, self.key, self.proxy = name, key, proxy
+
+    def run(self):
+        from ..services.ranks import query_rank
+
+        try:
+            result = query_rank(self.name, self.key, self.proxy, self.isInterruptionRequested)
+            if not self.isInterruptionRequested():
+                self.loaded.emit(result)
+        except Exception as error:
+            if not self.isInterruptionRequested():
+                self.failed.emit(compact_error(error))
+        finally:
+            self.key = ""

@@ -9,6 +9,8 @@ from ..adapters.source_registry import fetch_source
 from ..domain.models import AppState, Paper, Source, SourceStatus
 from ..domain.papers import sort_papers
 from ..errors import compact_error
+from .abstracts import retain_enrichment
+from .citations import retain_citations
 
 
 def now_label() -> str:
@@ -19,15 +21,26 @@ def refresh_sources(
     sources: list[Source],
     proxy: str = "",
     progress: Callable[[str], None] | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> tuple[dict[str, list[Paper]], dict[str, SourceStatus]]:
     sources = [deepcopy(source) for source in sources if source.get("enabled", True)]
     papers: dict[str, list[Paper]] = {}
     statuses: dict[str, SourceStatus] = {}
     if not sources:
         return papers, statuses
+
+    def fetch_unless_cancelled(source):
+        if cancelled and cancelled():
+            return []
+        return fetch_source(source, proxy)
+
     with ThreadPoolExecutor(max_workers=min(6, len(sources))) as pool:
-        futures = {pool.submit(fetch_source, source, proxy): source for source in sources}
+        futures = {pool.submit(fetch_unless_cancelled, source): source for source in sources}
         for index, future in enumerate(as_completed(futures), 1):
+            if cancelled and cancelled():
+                for pending in futures:
+                    pending.cancel()
+                break
             source = futures[future]
             try:
                 entries = future.result()
@@ -66,6 +79,7 @@ def apply_refresh(
     if profile is None:
         return False
     previous = state["papers"].get(profile_id, [])
+    previous_by_id = {paper["id"]: paper for paper in previous}
     combined = []
     enabled_ids = set()
     for source in profile["sources"]:
@@ -75,7 +89,20 @@ def apply_refresh(
         entries = new_papers.get(source["id"])
         if entries is None:
             entries = [paper for paper in previous if paper.get("source_id") == source["id"]]
-        combined.extend(entries)
+        for paper in entries:
+            old = previous_by_id.get(paper["id"])
+            if (
+                old
+                and not paper.get("publication_name")
+                and (paper["title"], paper["url"]) == (old["title"], old["url"])
+            ):
+                paper = {**paper, "publication_name": old.get("publication_name", "")}
+            combined.append(
+                retain_citations(
+                    retain_enrichment(paper, old),
+                    old,
+                )
+            )
     unique = {paper["id"]: paper for paper in combined}
     state["papers"][profile_id] = sort_papers(list(unique.values()))
     state["statuses"][profile_id] = {

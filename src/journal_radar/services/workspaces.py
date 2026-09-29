@@ -96,21 +96,29 @@ class WorkspaceService:
             self._commit(lambda state: current_profile(state)["sources"].extend(additions))
         return len(additions)
 
-    def save_settings(self, settings: Settings, credential: str | None = None) -> None:
+    def save_settings(
+        self, settings: Settings, credential: str | None = None, rank_credential: str | None = None
+    ) -> None:
         """None preserves the key; an empty string explicitly deletes it."""
         candidate = deepcopy(self.state)
         candidate["settings"].update(settings)
+        if rank_credential is not None:
+            candidate["publication_ranks"] = {}
         candidate = validate_state(candidate)
         self.repository.ensure_writable()
-        path = self.repository.folder / "api-key.bin"
-        old_key = load_api_key(path) if credential is not None else None
-        if credential is not None:
-            save_api_key(path, credential)
+        changes = [
+            (self.repository.folder / "api-key.bin", credential),
+            (self.repository.folder / "easyscholar-key.bin", rank_credential),
+        ]
+        previous = [(path, load_api_key(path)) for path, key in changes if key is not None]
         try:
+            for path, key in changes:
+                if key is not None:
+                    save_api_key(path, key)
             self.repository.save(candidate)
         except Exception:
-            if old_key is not None:
-                save_api_key(path, old_key)
+            for path, key in previous:
+                save_api_key(path, key)
             raise
         self.state.clear()
         self.state.update(candidate)

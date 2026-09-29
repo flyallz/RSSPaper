@@ -1,7 +1,7 @@
 """Visual system for the generic Journal Radar desktop app."""
 
 STYLE = r"""
-QWidget { font-family: "PingFang SC", "Helvetica Neue"; font-size: 12px; color: #203343; }
+QWidget { font-family: "PingFang SC", "Microsoft YaHei UI", "Helvetica Neue", sans-serif; font-size: 12px; color: #203343; }
 QMainWindow, QDialog { background: #F5F7F9; }
 QFrame#sidebar { background: #17374A; border: none; }
 QFrame#sidebar QLabel { color: #D7EBF0; }
@@ -28,6 +28,7 @@ QPushButton#primary { background: #13847E; color: #FFFFFF; border: 1px solid #13
 QPushButton#primary:hover { background: #0F706B; border-color: #0F706B; }
 QPushButton#danger { color: #B34141; border-color: #EBCACA; }
 QPushButton#textAction { color: #16756F; background: transparent; border: none; padding: 2px 0; font-weight: 600; }
+QPushButton#textAction:disabled { color: #A0AEB7; background: transparent; }
 QPushButton#textAction:hover { color: #0F5F5A; background: transparent; }
 QPushButton#nav { color: #DCEEF1; background: transparent; border: none; text-align: left; padding: 12px 14px; }
 QPushButton#nav:hover { background: #254E60; }

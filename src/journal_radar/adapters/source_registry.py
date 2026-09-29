@@ -29,7 +29,7 @@ def crossref_url(source: Source) -> str:
             "rows": 30,
             "sort": "published",
             "order": "desc",
-            "select": "DOI,title,URL,abstract,published,published-online,published-print,issued",
+            "select": "DOI,title,URL,abstract,published,published-online,published-print,issued,container-title,ISSN",
         }
     )
     return "https://api.crossref.org/journals/" + quote(issn) + "/works?" + query

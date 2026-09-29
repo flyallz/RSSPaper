@@ -14,6 +14,7 @@ from journal_radar.platform import macos_keychain, secrets, windows_dpapi
 class KeychainTests(unittest.TestCase):
     def fake_keychain(self):
         keychain = macos_keychain.Keychain.__new__(macos_keychain.Keychain)
+        keychain.account = macos_keychain.ACCOUNT
         keychain.security = Mock()
         keychain.cf = Mock()
         keychain._constant = lambda name: name

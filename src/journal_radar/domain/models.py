@@ -20,6 +20,7 @@ class Source(TypedDict):
     include_keywords: list[str]
     exclude_keywords: list[str]
     match_all: bool
+    publication_name: NotRequired[str]
 
 
 class Paper(TypedDict):
@@ -33,6 +34,14 @@ class Paper(TypedDict):
     date_kind: NotRequired[str]
     abstract: NotRequired[str]
     abstract_kind: NotRequired[str]
+    doi: NotRequired[str]
+    abstract_source: NotRequired[str]
+    abstract_retrieved_at: NotRequired[str]
+    abstract_error: NotRequired[str]
+    publication_name: NotRequired[str]
+    citations: NotRequired[dict[str, str]]
+    citation_doi: NotRequired[str]
+    citation_warning: NotRequired[str]
 
 
 class Settings(TypedDict):
@@ -40,6 +49,8 @@ class Settings(TypedDict):
     api_endpoint: str
     api_model: str
     refresh_minutes: int
+    rank_enabled: NotRequired[bool]
+    rank_fields: NotRequired[list[str]]
 
 
 class Profile(TypedDict):
@@ -55,6 +66,19 @@ class SourceStatus(TypedDict):
     time: str
 
 
+class PublicationLabel(TypedDict):
+    key: str
+    label: str
+    value: str
+    year: str
+
+
+class PublicationRank(TypedDict):
+    name: str
+    labels: list[PublicationLabel]
+    retrieved_at: NotRequired[str]
+
+
 class AppState(TypedDict):
     schema: int
     profiles: list[Profile]
@@ -64,3 +88,4 @@ class AppState(TypedDict):
     statuses: dict[str, dict[str, SourceStatus]]
     translations: dict[str, str]
     last_refresh: dict[str, str]
+    publication_ranks: NotRequired[dict[str, PublicationRank]]

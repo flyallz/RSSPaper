@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListView,
     QMessageBox,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -27,7 +28,8 @@ class SourceEditor(QDialog):
         self.source = source
         self.result_source: dict | None = None
         self.setWindowTitle("编辑期刊来源" if source else "添加期刊来源")
-        self.resize(780, 520)
+        available = self.screen().availableGeometry()
+        self.resize(min(780, available.width()), min(520, available.height()))
         self.setMinimumSize(720, 500)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 22, 24, 22)
@@ -46,6 +48,10 @@ class SourceEditor(QDialog):
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.name_edit = QLineEdit(source["name"] if source else "")
         self.name_edit.setPlaceholderText("例如：Nature / 中国科学")
+        self.publication_edit = QLineEdit(source.get("publication_name", "") if source else "")
+        self.publication_edit.setPlaceholderText(
+            "可选：期刊或会议正式全名，用于等级查询；不要填 arXiv 分类"
+        )
         self.kind_box = QComboBox()
         self.kind_box.addItem("RSS / Atom 地址", "rss")
         self.kind_box.addItem("Crossref · ISSN", "crossref")
@@ -72,6 +78,7 @@ class SourceEditor(QDialog):
         self.hint.setWordWrap(True)
         for field in (
             self.name_edit,
+            self.publication_edit,
             self.kind_box,
             self.value_edit,
             self.include_edit,
@@ -79,13 +86,18 @@ class SourceEditor(QDialog):
         ):
             field.setMinimumWidth(430)
         form.addRow("期刊名称", self.name_edit)
+        form.addRow("正式刊名 / 会议名", self.publication_edit)
         form.addRow("来源类型", self.kind_box)
         form.addRow("地址 / ISSN", self.value_edit)
         form.addRow("", self.hint)
         form.addRow("二层包含关键词", self.include_edit)
         form.addRow("排除关键词", self.exclude_edit)
         form.addRow("匹配方式", self.match_all)
-        layout.addWidget(panel)
+        self.form_scroll = QScrollArea()
+        self.form_scroll.setWidgetResizable(True)
+        self.form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.form_scroll.setWidget(panel)
+        layout.addWidget(self.form_scroll, 1)
         if source:
             self.kind_box.setCurrentIndex(
                 {"rss": 0, "crossref": 1, "arxiv": 2}.get(source["kind"], 0)
@@ -132,5 +144,6 @@ class SourceEditor(QDialog):
         if self.source:
             result["id"] = self.source["id"]
             result["enabled"] = self.source.get("enabled", True)
+        result["publication_name"] = self.publication_edit.text().strip()
         self.result_source = result
         self.accept()
