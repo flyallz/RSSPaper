@@ -9,6 +9,7 @@ from ..adapters.source_registry import fetch_source
 from ..domain.models import AppState, Paper, Source, SourceStatus
 from ..domain.papers import sort_papers
 from ..errors import compact_error
+from .abstracts import retain_enrichment
 
 
 def now_label() -> str:
@@ -66,6 +67,7 @@ def apply_refresh(
     if profile is None:
         return False
     previous = state["papers"].get(profile_id, [])
+    previous_by_id = {paper["id"]: paper for paper in previous}
     combined = []
     enabled_ids = set()
     for source in profile["sources"]:
@@ -75,7 +77,9 @@ def apply_refresh(
         entries = new_papers.get(source["id"])
         if entries is None:
             entries = [paper for paper in previous if paper.get("source_id") == source["id"]]
-        combined.extend(entries)
+        combined.extend(
+            retain_enrichment(paper, previous_by_id.get(paper["id"])) for paper in entries
+        )
     unique = {paper["id"]: paper for paper in combined}
     state["papers"][profile_id] = sort_papers(list(unique.values()))
     state["statuses"][profile_id] = {

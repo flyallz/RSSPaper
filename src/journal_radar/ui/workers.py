@@ -9,6 +9,22 @@ from PySide6.QtCore import QThread, Signal
 from ..domain.models import ContentType, Language, Source
 from ..errors import compact_error
 from ..services import TranslationJob, refresh_sources
+from ..services.abstracts import AbstractJob
+
+
+class AbstractWorker(QThread):
+    loaded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, job: AbstractJob):
+        super().__init__()
+        self.job = job
+
+    def run(self) -> None:
+        try:
+            self.loaded.emit(self.job.execute())
+        except Exception as error:
+            self.failed.emit(compact_error(error))
 
 
 class RefreshWorker(QThread):

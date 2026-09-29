@@ -11,7 +11,7 @@ from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin
 
 from ..domain.models import Paper, Source
-from ..domain.papers import make_paper
+from ..domain.papers import abstract_kind, make_paper, normalize_doi
 from ..domain.validation import valid_http_url
 
 _MONTHS = {
@@ -105,7 +105,8 @@ def parse_rss(payload: bytes, source: Source) -> list[Paper]:
     for item in root.iter():
         if _local(item.tag) not in ("item", "entry"):
             continue
-        title = link = date = description = precision = date_kind = ""
+        title = link = date = description = precision = date_kind = doi = ""
+        contents = []
         for child in item:
             field = _local(child.tag)
             if field == "title" and not title:
@@ -120,13 +121,25 @@ def parse_rss(payload: bytes, source: Source) -> list[Paper]:
                 date, precision = _date_info(_text(child))
             elif field in ("description", "summary") and not description:
                 description = "".join(child.itertext())
+                contents.append(_text(child))
+            elif field in ("encoded", "content", "abstract"):
+                contents.append(_text(child))
+            elif field in ("doi", "identifier", "guid") and not doi:
+                doi = normalize_doi(_text(child))
         if not date and description:
             date, precision, date_kind = _description_date(description)
         if title and valid_http_url(link):
-            abstract = re.sub(
-                r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", description))
-            ).strip()
-            papers.append(make_paper(source, title, link, date, precision, date_kind, abstract))
+            # A content:encoded/Atom content field may contain more than the teaser.
+            abstract = max(
+                contents,
+                key=lambda text: (abstract_kind(text) != "metadata", len(text)),
+                default="",
+            )
+            papers.append(
+                make_paper(
+                    source, title, link, date, precision, date_kind, abstract, doi, "RSS / Atom"
+                )
+            )
         if len(papers) >= 60:
             break
     return papers

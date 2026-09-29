@@ -5,7 +5,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
 from ..domain.models import Paper, Settings
-from ..domain.papers import abstract_kind, paper_date_label
+from ..domain.papers import paper_abstract_kind, paper_date_label
 from ..services.translations import TranslationJob
 from .widgets import make_button
 
@@ -22,11 +22,13 @@ def text_label(text: str, style: str) -> QLabel:
 class PaperCard(QFrame):
     title_requested = Signal()
     abstract_requested = Signal()
+    enrichment_requested = Signal()
 
     def __init__(self, paper: Paper, settings: Settings, translations: dict[str, str]):
         super().__init__()
         self.setObjectName("paperCard")
         self.abstract_parts = None
+        self.enrichment_button = None
         column = QVBoxLayout(self)
         column.setContentsMargins(21, 18, 21, 17)
         column.setSpacing(9)
@@ -35,8 +37,21 @@ class PaperCard(QFrame):
         translation = text_label(translations.get(title_job.cache_key, ""), "translation")
         translation.setVisible(bool(translation.text()))
         column.addWidget(translation)
-        if paper.get("abstract", "").strip():
+        kind = paper_abstract_kind(paper)
+        if kind != "missing":
             self._add_abstract(column, paper, settings, translations)
+        else:
+            column.addWidget(text_label("来源未提供摘要", "notice"))
+        if kind != "full":
+            self.enrichment_button = make_button("获取完整摘要")
+            self.enrichment_button.setObjectName("textAction")
+            self.enrichment_button.setToolTip(
+                "通过 DOI 或唯一的标题匹配查询 Crossref；不保证每篇都有摘要"
+            )
+            self.enrichment_button.clicked.connect(self.enrichment_requested.emit)
+            column.addWidget(self.enrichment_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        if paper.get("abstract_error"):
+            column.addWidget(text_label("摘要补全：" + paper["abstract_error"], "notice"))
         footer = QHBoxLayout()
         meta = text_label(
             f"{paper.get('source_name', '')}  ·  {paper_date_label(paper)}", "paperMeta"
@@ -56,15 +71,22 @@ class PaperCard(QFrame):
 
     def _add_abstract(self, column, paper, settings, translations):
         text = paper["abstract"].strip()
-        kind = paper.get("abstract_kind") or abstract_kind(text)
+        kind = paper_abstract_kind(paper)
         collapsed = text[:360] + ("…" if len(text) > 360 else "")
         abstract = text_label(collapsed, "abstract")
         column.addWidget(abstract)
-        if kind in ("fragment", "metadata"):
-            notice = (
-                "RSS 仅提供摘要片段" if kind == "fragment" else "RSS 仅提供出版信息，未提供论文摘要"
-            )
-            column.addWidget(text_label(notice, "notice"))
+        notices = {
+            "fragment": "来源仅提供摘要片段",
+            "metadata": "来源仅提供出版信息，未提供论文摘要",
+            "available": "来源提供的摘要 / 描述，完整性未确认",
+            "full": "完整摘要（来源提交）",
+        }
+        notice = notices[kind]
+        if paper.get("abstract_source"):
+            notice += " · " + paper["abstract_source"]
+        if paper.get("abstract_retrieved_at"):
+            notice += " · 获取于 " + paper["abstract_retrieved_at"][:10]
+        column.addWidget(text_label(notice, "notice"))
         job = TranslationJob.from_settings(text, settings, "abstract")
         translation = text_label(translations.get(job.cache_key, ""), "translation")
         translation.setVisible(bool(translation.text()))

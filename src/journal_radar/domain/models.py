@@ -33,6 +33,10 @@ class Paper(TypedDict):
     date_kind: NotRequired[str]
     abstract: NotRequired[str]
     abstract_kind: NotRequired[str]
+    doi: NotRequired[str]
+    abstract_source: NotRequired[str]
+    abstract_retrieved_at: NotRequired[str]
+    abstract_error: NotRequired[str]
 
 
 class Settings(TypedDict):

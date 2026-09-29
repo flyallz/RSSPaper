@@ -27,15 +27,17 @@ from journal_radar.platform.paths import data_dir
 from journal_radar.platform.secrets import load_api_key
 from journal_radar.storage import StateRepository, current_profile
 
+from ..adapters.abstracts import AbstractResult
 from ..domain.models import AppState, ContentType, Paper, SourceStatus
 from ..services import TranslationJob, apply_refresh, select_papers
+from ..services.abstracts import AbstractJob, apply_abstract
 from ..services.workspaces import WorkspaceService
 from .main_view import MainView
 from .paper_card import PaperCard
 from .settings_dialog import SettingsDialog
 from .sources_dialog import SourcesDialog
 from .widgets import make_button, resource_path
-from .workers import RefreshWorker, TranslateWorker
+from .workers import AbstractWorker, RefreshWorker, TranslateWorker
 
 
 class MainWindow(QMainWindow):
@@ -52,6 +54,7 @@ class MainWindow(QMainWindow):
         self.refresh_worker: RefreshWorker | None = None
         self.refresh_profile_id = ""
         self.translation_workers: dict[str, TranslateWorker] = {}
+        self.abstract_workers: dict[tuple[str, str], AbstractWorker] = {}
         self.card_parts: dict[str, tuple[QLabel, QPushButton]] = {}
         self.abstract_parts: dict[str, tuple[QLabel, QPushButton]] = {}
         self.card_cache_keys: dict[str, str] = {}
@@ -307,6 +310,11 @@ class MainWindow(QMainWindow):
         card = PaperCard(paper, self.state["settings"], self.state["translations"])
         card.title_requested.connect(lambda: self.translate_paper(paper))
         card.abstract_requested.connect(lambda: self.translate_abstract(paper))
+        card.enrichment_requested.connect(lambda: self.enrich_abstract(paper))
+        pending = (current_profile(self.state)["id"], paper["id"]) in self.abstract_workers
+        if pending and card.enrichment_button:
+            card.enrichment_button.setText("正在获取摘要…")
+            card.enrichment_button.setEnabled(False)
         self.card_parts[paper["id"]] = card.title_parts
         self.card_cache_keys[paper["id"] + ":title"] = TranslationJob.from_settings(
             paper["title"], self.state["settings"]
@@ -316,7 +324,58 @@ class MainWindow(QMainWindow):
             self.card_cache_keys[paper["id"] + ":abstract"] = TranslationJob.from_settings(
                 paper.get("abstract", "").strip(), self.state["settings"], "abstract"
             ).cache_key
+        for kind, parts in (("title", card.title_parts), ("abstract", card.abstract_parts)):
+            worker = self.translation_workers.get(paper["id"] + ":" + kind)
+            if (
+                parts
+                and worker
+                and worker.job.cache_key == self.card_cache_keys.get(paper["id"] + ":" + kind)
+            ):
+                parts[1].setText("翻译中…")
+                parts[1].setEnabled(False)
         return card
+
+    def enrich_abstract(self, paper: Paper) -> None:
+        job = AbstractJob.for_paper(
+            current_profile(self.state)["id"], paper, self.state["settings"].get("proxy", "")
+        )
+        key = (job.profile_id, job.paper_id)
+        if key in self.abstract_workers:
+            return
+        if len(self.abstract_workers) >= 3:
+            self.view.status_label.setText("已有三个摘要查询正在进行，请稍后再试。")
+            return
+        worker = AbstractWorker(job)
+        self.abstract_workers[key] = worker
+        worker.loaded.connect(lambda result: self.abstract_done(job, result))
+        worker.failed.connect(lambda error: self.abstract_done(job, error=error))
+        worker.finished.connect(lambda: self.abstract_finished(key))
+        self.render_papers()
+        self.view.status_label.setText("正在查询摘要，现有论文仍可阅读。")
+        worker.start()
+
+    def abstract_done(
+        self, job: AbstractJob, result: AbstractResult | None = None, error: str = ""
+    ) -> None:
+        if not apply_abstract(self.state, job, result, error):
+            return
+        save_error = ""
+        try:
+            self.repository.save(self.state)
+        except Exception as failure:
+            save_error = compact_error(failure)
+        if current_profile(self.state)["id"] == job.profile_id:
+            self.render_papers()
+            self.view.status_label.setText(
+                "摘要结果未保存：" + save_error
+                if save_error
+                else ("完整摘要已获取并缓存，可展开或翻译。" if result else "摘要未补全：" + error)
+            )
+
+    def abstract_finished(self, key: tuple[str, str]) -> None:
+        self.abstract_workers.pop(key, None)
+        if current_profile(self.state)["id"] == key[0]:
+            self.render_papers()
 
     def load_more(self) -> None:
         self.visible_limit += 60
@@ -429,11 +488,13 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "翻译失败", error)
 
     def closeEvent(self, event) -> None:
-        active = (self.refresh_worker and self.refresh_worker.isRunning()) or any(
-            worker.isRunning() for worker in self.translation_workers.values()
+        active = (
+            (self.refresh_worker and self.refresh_worker.isRunning())
+            or any(worker.isRunning() for worker in self.translation_workers.values())
+            or any(worker.isRunning() for worker in self.abstract_workers.values())
         )
         if active:
-            self.view.status_label.setText("请等待当前刷新或翻译完成后关闭窗口。")
+            self.view.status_label.setText("请等待当前刷新、摘要获取或翻译完成后关闭窗口。")
             event.ignore()
         else:
             super().closeEvent(event)

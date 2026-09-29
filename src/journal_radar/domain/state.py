@@ -122,6 +122,10 @@ def validate_state(raw: object) -> AppState:
                 "abstract_kind",
                 "date_kind",
                 "date_precision",
+                "doi",
+                "abstract_source",
+                "abstract_retrieved_at",
+                "abstract_error",
             ):
                 if name in paper and not isinstance(paper[name], str):
                     raise ValueError("论文缓存字段应为文本")
