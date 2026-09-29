@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListView,
     QMessageBox,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -27,7 +28,8 @@ class SourceEditor(QDialog):
         self.source = source
         self.result_source: dict | None = None
         self.setWindowTitle("编辑期刊来源" if source else "添加期刊来源")
-        self.resize(780, 520)
+        available = self.screen().availableGeometry()
+        self.resize(min(780, available.width()), min(520, available.height()))
         self.setMinimumSize(720, 500)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 22, 24, 22)
@@ -85,7 +87,11 @@ class SourceEditor(QDialog):
         form.addRow("二层包含关键词", self.include_edit)
         form.addRow("排除关键词", self.exclude_edit)
         form.addRow("匹配方式", self.match_all)
-        layout.addWidget(panel)
+        self.form_scroll = QScrollArea()
+        self.form_scroll.setWidgetResizable(True)
+        self.form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.form_scroll.setWidget(panel)
+        layout.addWidget(self.form_scroll, 1)
         if source:
             self.kind_box.setCurrentIndex(
                 {"rss": 0, "crossref": 1, "arxiv": 2}.get(source["kind"], 0)

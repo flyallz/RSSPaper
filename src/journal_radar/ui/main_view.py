@@ -27,6 +27,7 @@ class MainView(QWidget):
     settings_requested = Signal()
     refresh_requested = Signal()
     filters_changed = Signal()
+    cancel_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -99,8 +100,10 @@ class MainView(QWidget):
         titles.setSpacing(5)
         self.page_title = QLabel()
         self.page_title.setObjectName("pageTitle")
+        self.page_title.setWordWrap(True)
         self.page_subtitle = QLabel("把不同学科的期刊放在各自工作区，集中查看新论文。")
         self.page_subtitle.setObjectName("pageSubtitle")
+        self.page_subtitle.setWordWrap(True)
         titles.addWidget(self.page_title)
         titles.addWidget(self.page_subtitle)
         header.addLayout(titles, 1)
@@ -109,14 +112,16 @@ class MainView(QWidget):
         header.addWidget(self.refresh_button)
         main.addLayout(header)
 
-        stats = QHBoxLayout()
+        self.stats_panel = QWidget()
+        stats = QHBoxLayout(self.stats_panel)
+        stats.setContentsMargins(0, 0, 0, 0)
         stats.setSpacing(13)
         self.source_stat = self.make_stat("期刊来源")
         self.paper_stat = self.make_stat("缓存论文")
         self.updated_stat = self.make_stat("最近刷新")
         for frame, _value in (self.source_stat, self.paper_stat, self.updated_stat):
             stats.addWidget(frame, 1)
-        main.addLayout(stats)
+        main.addWidget(self.stats_panel)
 
         controls = QHBoxLayout()
         self.search = QLineEdit()
@@ -159,8 +164,27 @@ class MainView(QWidget):
         main.addWidget(self.paper_scroll, 1)
         self.status_label = QLabel("就绪")
         self.status_label.setObjectName("notice")
+        self.status_label.setWordWrap(True)
         main.addWidget(self.status_label)
+        self.task_bar = QWidget()
+        self.task_bar.hide()
+        tasks = QHBoxLayout(self.task_bar)
+        tasks.setContentsMargins(0, 0, 0, 0)
+        self.task_count = QLabel()
+        self.task_count.setObjectName("notice")
+        tasks.addWidget(self.task_count, 1)
+        self.cancel_button = make_button("取消后台任务")
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.clicked.connect(self.cancel_requested.emit)
+        tasks.addWidget(self.cancel_button)
+        main.addWidget(self.task_bar)
         row.addWidget(content, 1)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "stats_panel"):
+            self.stats_panel.setVisible(self.height() >= 640)
+            self.page_subtitle.setVisible(self.height() >= 600)
 
     def make_stat(self, label: str) -> tuple[QFrame, QLabel]:
         frame = QFrame()

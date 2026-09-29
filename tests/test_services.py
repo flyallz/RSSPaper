@@ -55,6 +55,13 @@ class ServiceTests(unittest.TestCase):
         self.assertFalse(statuses[self.failed["id"]]["ok"])
         self.assertEqual(len(progress), 2)
 
+    def test_cancelled_refresh_does_not_fetch_waiting_sources(self):
+        with patch("journal_radar.services.refresh.fetch_source") as fetch:
+            papers, statuses = refresh_sources(self.profile["sources"], cancelled=lambda: True)
+        self.assertFalse(fetch.called)
+        self.assertFalse(papers)
+        self.assertFalse(statuses)
+
     def test_translation_snapshot_preserves_model_cache_and_legacy_key_format(self):
         from journal_radar.adapters.translation import translation_key
 
@@ -67,7 +74,7 @@ class ServiceTests(unittest.TestCase):
         abstract = TranslationJob.from_settings("教育研究", settings, "abstract")
         self.assertEqual(abstract.target_language, "en")
         self.assertEqual(
-            abstract.cache_key, translation_key("", "different-model", "摘要：教育研究", "en")
+            abstract.cache_key, translation_key("", "different-model", "摘要v2：教育研究", "en")
         )
         self.assertNotEqual(
             abstract.cache_key, TranslationJob.from_settings("教育研究", settings).cache_key

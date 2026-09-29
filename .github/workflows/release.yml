@@ -33,4 +33,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(PYTHONPATH=src python -c 'from journal_radar.config import VERSION; print(VERSION)')
-          gh release create "v$VERSION" artifacts/*.zip artifacts/SHA256SUMS-*.txt --draft --title "期刊雷达 · v$VERSION" --notes-file docs/版本说明-v1.4.0.md --target "$GITHUB_SHA"
+          gh release create "v$VERSION" artifacts/*.zip artifacts/SHA256SUMS-*.txt --draft --title "期刊雷达 · v$VERSION" --notes-file "docs/版本说明-v$VERSION.md" --target "$GITHUB_SHA"

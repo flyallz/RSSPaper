@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 from ..domain.models import Paper, Settings
 from ..domain.papers import paper_abstract_kind, paper_date_label
 from ..services.translations import TranslationJob
+from .expandable_text import ExpandableText
 from .widgets import make_button
 
 
@@ -29,6 +30,7 @@ class PaperCard(QFrame):
         self.setObjectName("paperCard")
         self.paper_id = paper["id"]
         self.abstract_toggle = None
+        self.translation_toggle = None
         self.abstract_parts = None
         self.enrichment_button = None
         column = QVBoxLayout(self)
@@ -36,9 +38,16 @@ class PaperCard(QFrame):
         column.setSpacing(9)
         column.addWidget(text_label(paper["title"], "paperTitle"))
         title_job = TranslationJob.from_settings(paper["title"], settings)
-        translation = text_label(translations.get(title_job.cache_key, ""), "translation")
+        translation = ExpandableText(
+            translations.get(title_job.cache_key, ""), "translation", "译题", self
+        )
         translation.setVisible(bool(translation.text()))
         column.addWidget(translation)
+        title_actions = QHBoxLayout()
+        title_actions.addWidget(translation.toggle)
+        title_actions.addWidget(translation.copy_button)
+        title_actions.addStretch()
+        column.addLayout(title_actions)
         kind = paper_abstract_kind(paper)
         self.abstract_actions = QHBoxLayout()
         self.abstract_actions.setSpacing(18)
@@ -78,8 +87,10 @@ class PaperCard(QFrame):
     def _add_abstract(self, column, paper, settings, translations):
         text = paper["abstract"].strip()
         kind = paper_abstract_kind(paper)
-        collapsed = text[:360] + ("…" if len(text) > 360 else "")
-        abstract = text_label(collapsed, "abstract")
+        abstract = ExpandableText(
+            text, "abstract", "出版信息" if kind == "metadata" else "摘要", self
+        )
+        self.abstract_toggle = abstract.toggle
         column.addWidget(abstract)
         notices = {
             "fragment": "来源仅提供摘要片段",
@@ -94,22 +105,24 @@ class PaperCard(QFrame):
             notice += " · 获取于 " + paper["abstract_retrieved_at"][:10]
         column.addWidget(text_label(notice, "notice"))
         job = TranslationJob.from_settings(text, settings, "abstract")
-        translation = text_label(translations.get(job.cache_key, ""), "translation")
+        translation = ExpandableText(
+            translations.get(job.cache_key, "") if kind != "metadata" else "",
+            "translation",
+            "摘要译文",
+            self,
+        )
+        self.translation_toggle = translation.toggle
         translation.setVisible(bool(translation.text()))
         column.addWidget(translation)
         actions = self.abstract_actions
-        if len(text) > 360:
-            toggle = make_button("展开摘要")
-            toggle.setObjectName("textAction")
-            self.abstract_toggle = toggle
-            toggle.setCheckable(True)
-            toggle.toggled.connect(
-                lambda expanded: abstract.setText(text if expanded else collapsed)
-            )
-            toggle.toggled.connect(
-                lambda expanded: toggle.setText("收起摘要" if expanded else "展开摘要")
-            )
-            actions.addWidget(toggle)
+        actions.addWidget(abstract.toggle)
+        actions.addWidget(abstract.copy_button)
+        translated_actions = QHBoxLayout()
+        translated_actions.setSpacing(18)
+        translated_actions.addWidget(translation.toggle)
+        translated_actions.addWidget(translation.copy_button)
+        translated_actions.addStretch()
+        column.addLayout(translated_actions)
         label = "摘要译为英文" if job.target_language == "en" else "摘要译为中文"
         translate = make_button("摘要已翻译" if translation.text() else label)
         translate.setObjectName("textAction")

@@ -72,7 +72,9 @@ class ReadingPositionTests(unittest.TestCase):
             text.strip(), self.window.state["settings"], content_type
         )
         worker_id = paper["id"] + ":" + content_type
-        self.window.translation_workers[worker_id] = SimpleNamespace(job=job)
+        self.window.translation_workers[worker_id] = SimpleNamespace(
+            job=job, isInterruptionRequested=lambda: False
+        )
         self.window.translation_done(paper, "中文译文。" * 350, job)
         self.window.translation_finished(worker_id)
         self.settle()
@@ -123,6 +125,72 @@ class ReadingPositionTests(unittest.TestCase):
         self.settle()
         self.assertEqual(self.card(10).y() - self.scroll.value(), offset)
 
+    def test_refresh_keeps_anchor_with_new_papers_inserted_above_reader(self):
+        self.card(9).abstract_toggle.click()
+        self.settle()
+        paper_id = self.papers[9]["id"]
+        offset = self.read(9)
+        self.window.refresh_profile_id = self.profile["id"]
+        source = self.profile["sources"][0]
+        newest = make_paper(source, "New paper", "https://example.org/new", "2028-01", "month")
+        self.window.apply_refresh({source["id"]: [newest] + self.papers}, {})
+        self.settle()
+        card = next(c for c in self.window.reading_state.cards() if c.paper_id == paper_id)
+        self.assertTrue(card.abstract_toggle.isChecked())
+        self.assertEqual(card.y() - self.scroll.value(), offset)
+
+    def test_load_more_and_settings_render_keep_both_expansion_states(self):
+        self.window.visible_limit = 5
+        self.window.render_papers()
+        self.settle()
+        self.complete_translation(3)
+        card = self.card(3)
+        card.abstract_toggle.click()
+        card.translation_toggle.click()
+        self.settle()
+        offset = self.read(3)
+        self.window.load_more()
+        self.settle()
+        self.assertEqual(len(self.window.reading_state.cards()), 20)
+        self.assertEqual(self.card(3).y() - self.scroll.value(), offset)
+        self.assertTrue(self.card(3).abstract_toggle.isChecked())
+        self.assertTrue(self.card(3).translation_toggle.isChecked())
+        self.window.state["settings"]["refresh_minutes"] = 60
+        self.window.render_papers()
+        self.settle()
+        self.assertEqual(self.card(3).y() - self.scroll.value(), offset)
+        self.assertTrue(self.card(3).translation_toggle.isChecked())
+
+    def test_original_and_translation_copy_full_content_when_folded(self):
+        self.complete_translation(3)
+        card = self.card(3)
+        original = card.findChild(QLabel, "abstract")
+        translated = card.abstract_parts[0]
+        self.assertTrue(original.text().endswith("…"))
+        self.assertTrue(translated.text().endswith("…"))
+        original.copy_button.click()
+        self.assertEqual(self.application.clipboard().text(), self.papers[3]["abstract"].strip())
+        translated.copy_button.click()
+        self.assertEqual(self.application.clipboard().text(), "中文译文。" * 350)
+        card.translation_toggle.click()
+        self.assertEqual(translated.text(), "中文译文。" * 350)
+        self.assertFalse(card.abstract_toggle.isChecked())
+
+    def test_small_window_long_names_and_action_buttons_fit_card(self):
+        from PySide6.QtWidgets import QPushButton
+
+        self.window.resize(920, 620)
+        self.settle()
+        card = self.card(0)
+        self.assertGreater(card.width(), 500)
+        self.window.resize(820, 500)
+        self.settle()
+        self.assertGreater(self.window.view.paper_scroll.height(), 220)
+        for button in card.findChildren(QPushButton):
+            if button.isVisible():
+                self.assertLessEqual(button.x() + button.width(), card.width())
+                self.assertLessEqual(button.y() + button.height(), card.height())
+
     def test_pending_anchor_does_not_restore_after_filter_changes(self):
         self.read(10)
         paper = self.papers[1]
@@ -135,7 +203,7 @@ class ReadingPositionTests(unittest.TestCase):
 
     def test_long_source_gets_footer_space_and_metadata_has_no_translation_action(self):
         meta = self.card(0).findChild(QLabel, "paperMeta")
-        self.assertGreater(meta.width(), 400)
+        self.assertGreater(meta.width(), self.card(0).width() * 0.4)
         paper = self.papers[0]
         paper["abstract"] = "Publication date: February 2027 Source: Learning and Instruction"
         paper["abstract_kind"] = "metadata"

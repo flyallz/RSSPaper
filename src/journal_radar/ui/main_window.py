@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from time import monotonic
 from urllib.parse import urlparse
 
 from PySide6.QtCore import Qt, QTimer
@@ -34,8 +35,10 @@ from ..services.abstracts import AbstractJob, apply_abstract
 from ..services.workspaces import WorkspaceService
 from .main_view import MainView
 from .paper_card import PaperCard
+from .reading_state import ReadingState
 from .settings_dialog import SettingsDialog
 from .sources_dialog import SourcesDialog
+from .translation_queue import TranslationQueue
 from .widgets import make_button, resource_path
 from .workers import AbstractWorker, RefreshWorker, TranslateWorker
 
@@ -53,21 +56,27 @@ class MainWindow(QMainWindow):
         self.workspaces = WorkspaceService(self.state, self.repository)
         self.refresh_worker: RefreshWorker | None = None
         self.refresh_profile_id = ""
-        self.translation_workers: dict[str, TranslateWorker] = {}
+        self.translation_queue = TranslationQueue(self)
+        self.translation_workers = self.translation_queue.workers
+        self.closing = False
+        self.auto_refresh_resume_at = 0.0
         self.abstract_workers: dict[tuple[str, str], AbstractWorker] = {}
         self.card_parts: dict[str, tuple[QLabel, QPushButton]] = {}
         self.abstract_parts: dict[str, tuple[QLabel, QPushButton]] = {}
         self.card_cache_keys: dict[str, str] = {}
-        self.reading_revision = 0
-        self.pending_reading_anchor = None
         self.visible_limit = 60
         self.setWindowTitle(APP_NAME + " · 通用版")
         icon = resource_path("assets/icon.svg")
         if icon.exists():
             self.setWindowIcon(QIcon(str(icon)))
-        self.setMinimumSize(920, 620)
-        self.resize(1190, 790)
+        self.setMinimumSize(820, 500)
+        available = self.screen().availableGeometry()
+        self.resize(min(1190, available.width()), min(790, available.height()))
         self.view = MainView(self)
+        self.reading_state = ReadingState(self.view.paper_scroll, self.view.paper_layout)
+        self.translation_queue.changed.connect(self.update_task_controls)
+        self.translation_queue.completed.connect(self.translation_finished)
+        self.view.cancel_requested.connect(self.cancel_tasks)
         self.setCentralWidget(self.view)
         self.view.profile_changed.connect(self.change_profile)
         self.view.new_profile_requested.connect(self.new_profile)
@@ -199,6 +208,8 @@ class MainWindow(QMainWindow):
             self.view.status_label.setText("设置已保存。翻译只会在点击论文的按钮后执行。")
 
     def refresh(self) -> None:
+        if self.closing:
+            return
         if self.refresh_worker and self.refresh_worker.isRunning():
             return
         profile = current_profile(self.state)
@@ -212,15 +223,24 @@ class MainWindow(QMainWindow):
         self.view.profile_box.setEnabled(False)
         self.view.status_label.setText(f"正在刷新 {len(sources)} 个来源…")
         self.refresh_worker = RefreshWorker(sources, self.state["settings"].get("proxy", ""))
-        self.refresh_worker.progress.connect(self.view.status_label.setText)
+        self.refresh_worker.progress.connect(
+            lambda text: (
+                self.view.status_label.setText(text)
+                if not self.refresh_worker.isInterruptionRequested() and not self.closing
+                else None
+            )
+        )
         self.refresh_worker.loaded.connect(self.apply_refresh)
         self.refresh_worker.finished.connect(self.refresh_finished)
         self.refresh_worker.start()
+        self.update_task_controls()
 
     def apply_refresh(
         self, new_papers: dict[str, list[Paper]], statuses: dict[str, SourceStatus]
     ) -> None:
         profile_id = self.refresh_profile_id
+        if self.closing or (self.refresh_worker and self.refresh_worker.isInterruptionRequested()):
+            return
         if not apply_refresh(self.state, profile_id, new_papers, statuses):
             return
         try:
@@ -236,8 +256,11 @@ class MainWindow(QMainWindow):
     def refresh_finished(self) -> None:
         self.view.refresh_button.setEnabled(True)
         self.view.profile_box.setEnabled(True)
+        self.update_task_controls()
 
     def maybe_refresh(self) -> None:
+        if self.closing or monotonic() < self.auto_refresh_resume_at:
+            return
         if self.refresh_worker and self.refresh_worker.isRunning():
             return
         interval = int(self.state["settings"].get("refresh_minutes", 30))
@@ -272,7 +295,17 @@ class MainWindow(QMainWindow):
     def render_papers(self) -> None:
         if not hasattr(self, "view"):
             return
-        self.reading_revision += 1
+        key = (
+            current_profile(self.state)["id"],
+            self.view.search.text(),
+            self.view.source_filter.currentData(),
+            self.view.date_filter.currentData(),
+        )
+        self.reading_state.rebuild(key, self._render_papers)
+
+    def _render_papers(self) -> None:
+        if not hasattr(self, "view"):
+            return
         profile = current_profile(self.state)
         papers = self.state["papers"].get(profile["id"], [])
         query = self.view.search.text().strip().casefold()
@@ -315,45 +348,7 @@ class MainWindow(QMainWindow):
             self.view.paper_layout.addWidget(more)
 
     def preserve_reading_position(self, update: Callable[[], None]) -> None:
-        """Anchor to the visible paper, not a pixel value changed by growing cards."""
-        layout = self.view.paper_layout
-        layout.activate()
-        scroll = self.view.paper_scroll.verticalScrollBar()
-        anchor = None
-        for index in range(layout.count()):
-            card = layout.itemAt(index).widget()
-            if isinstance(card, PaperCard) and card.y() + card.height() > scroll.value():
-                anchor = (card.paper_id, card.y() - scroll.value())
-                break
-        profile_id = current_profile(self.state)["id"]
-        pending = self.pending_reading_anchor
-        if pending and pending[:2] == (self.reading_revision, profile_id):
-            if pending[3] == scroll.value():
-                # Several workers can finish before Qt relays out the list.
-                anchor = pending[2]
-        self.reading_revision += 1
-        revision = self.reading_revision
-        self.pending_reading_anchor = (revision, profile_id, anchor, scroll.value())
-        update()
-
-        def restore() -> None:
-            if revision != self.reading_revision or current_profile(self.state)["id"] != profile_id:
-                return
-            pending = self.pending_reading_anchor
-            self.pending_reading_anchor = None
-            if pending and scroll.value() != pending[3]:
-                # Respect a new user scroll made before the deferred restore runs.
-                return
-            layout.activate()
-            if anchor:
-                for index in range(layout.count()):
-                    card = layout.itemAt(index).widget()
-                    if isinstance(card, PaperCard) and card.paper_id == anchor[0]:
-                        scroll.setValue(card.y() - anchor[1])
-                        break
-
-        # Qt calculates wrapped-label heights after the content changes.
-        QTimer.singleShot(0, lambda: QTimer.singleShot(0, restore))
+        self.reading_state.preserve(update)
 
     def update_paper_card(self, paper_id: str) -> None:
         """Replace only the changed card; leave other papers' reading state intact."""
@@ -368,10 +363,7 @@ class MainWindow(QMainWindow):
                 continue
 
             def replace() -> None:
-                expanded = bool(old.abstract_toggle and old.abstract_toggle.isChecked())
                 new = self.make_paper_card(paper)
-                if expanded and new.abstract_toggle:
-                    new.abstract_toggle.setChecked(True)
                 item = layout.takeAt(index)
                 old.hide()
                 old.deleteLater()
@@ -406,7 +398,15 @@ class MainWindow(QMainWindow):
                 same_text = worker.job.cache_key == self.card_cache_keys.get(
                     paper["id"] + ":" + kind
                 )
-                parts[1].setText("翻译中…" if same_text else "等待之前的翻译…")
+                parts[1].setText(
+                    (
+                        "翻译中…"
+                        if paper["id"] + ":" + kind in self.translation_queue.active
+                        else "排队中…"
+                    )
+                    if same_text
+                    else "等待之前的翻译…"
+                )
                 parts[1].setEnabled(False)
         return card
 
@@ -434,10 +434,14 @@ class MainWindow(QMainWindow):
                 break
         self.view.status_label.setText("正在查询摘要，现有论文仍可阅读。")
         worker.start()
+        self.update_task_controls()
 
     def abstract_done(
         self, job: AbstractJob, result: AbstractResult | None = None, error: str = ""
     ) -> None:
+        worker = self.abstract_workers.get((job.profile_id, job.paper_id))
+        if self.closing or (worker and worker.isInterruptionRequested()):
+            return
         if not apply_abstract(self.state, job, result, error):
             return
         save_error = ""
@@ -455,6 +459,7 @@ class MainWindow(QMainWindow):
 
     def abstract_finished(self, key: tuple[str, str]) -> None:
         self.abstract_workers.pop(key, None)
+        self.update_task_controls()
         if current_profile(self.state)["id"] == key[0]:
             for index in range(self.view.paper_layout.count()):
                 card = self.view.paper_layout.itemAt(index).widget()
@@ -499,9 +504,12 @@ class MainWindow(QMainWindow):
             self.open_settings()
             return
         paper_id = paper["id"]
-        target_language = "en" if contains_cjk(text) else "zh"
+        target_language = TranslationJob.from_settings(text, settings, content_type).target_language
         worker_id = paper_id + (":abstract" if content_type == "abstract" else ":title")
         if worker_id in self.translation_workers:
+            return
+        if len(self.translation_workers) >= self.translation_queue.capacity:
+            self.view.status_label.setText("翻译队列已满（最多 20 项），请稍后再试。")
             return
         parts = (self.abstract_parts if content_type == "abstract" else self.card_parts).get(
             paper_id
@@ -519,25 +527,36 @@ class MainWindow(QMainWindow):
             target_language,
             content_type,
         )
-        self.translation_workers[worker_id] = worker
+        profile_id = current_profile(self.state)["id"]
         worker.translated.connect(
-            lambda _id, result, item=paper, job=worker.job: self.translation_done(item, result, job)
-        )
-        worker.failed.connect(
-            lambda _id, error, item=paper, kind=content_type: self.translation_failed(
-                item, error, kind
+            lambda _id, result, item=paper, job=worker.job: (
+                self.translation_done(item, result, job, profile_id)
+                if not worker.isInterruptionRequested() and not self.closing
+                else None
             )
         )
-        worker.finished.connect(lambda item_id=worker_id: self.translation_finished(item_id))
-        worker.start()
+        worker.failed.connect(
+            lambda _id, error, item=paper, kind=content_type: (
+                self.translation_failed(item, error, kind, worker.job, profile_id)
+                if not worker.isInterruptionRequested() and not self.closing
+                else None
+            )
+        )
+        if self.translation_queue.submit(worker):
+            self.update_paper_card(paper_id)
 
-    def translation_finished(self, worker_id: str) -> None:
-        worker = self.translation_workers.pop(worker_id, None)
+    def translation_finished(self, worker_id: str, worker=None) -> None:
+        worker = worker or self.translation_workers.pop(worker_id, None)
         # A replaced abstract can be waiting for a translation of its previous text.
-        if worker and self.card_cache_keys.get(worker_id) != worker.job.cache_key:
+        if worker and (
+            worker.isInterruptionRequested()
+            or self.card_cache_keys.get(worker_id) != worker.job.cache_key
+        ):
             self.update_paper_card(worker_id.rsplit(":", 1)[0])
 
-    def translation_done(self, paper: Paper, text: str, job: TranslationJob) -> None:
+    def translation_done(
+        self, paper: Paper, text: str, job: TranslationJob, profile_id: str | None = None
+    ) -> None:
         content_type = job.content_type
         self.state["translations"][job.cache_key] = text
         save_error = ""
@@ -545,6 +564,8 @@ class MainWindow(QMainWindow):
             self.repository.save(self.state)
         except Exception as error:
             save_error = compact_error(error)
+        if profile_id and current_profile(self.state)["id"] != profile_id:
+            return
         current_job = TranslationJob.from_settings(job.text, self.state["settings"], content_type)
         parts = (self.abstract_parts if content_type == "abstract" else self.card_parts).get(
             paper["id"]
@@ -568,29 +589,91 @@ class MainWindow(QMainWindow):
         )
 
     def translation_failed(
-        self, paper: Paper, error: str, content_type: ContentType = "title"
+        self,
+        paper: Paper,
+        error: str,
+        content_type: ContentType = "title",
+        job: TranslationJob | None = None,
+        profile_id: str | None = None,
     ) -> None:
+        if profile_id and current_profile(self.state)["id"] != profile_id:
+            return
+        if job and (
+            self.card_cache_keys.get(paper["id"] + ":" + content_type) != job.cache_key
+            or TranslationJob.from_settings(
+                job.text, self.state["settings"], content_type
+            ).cache_key
+            != job.cache_key
+        ):
+            return
         parts = (self.abstract_parts if content_type == "abstract" else self.card_parts).get(
             paper["id"]
         )
-        if parts:
-            source_text = (
-                paper.get("abstract", "") if content_type == "abstract" else paper.get("title", "")
-            )
-            prefix = "摘要" if content_type == "abstract" else ""
-            parts[1].setText(prefix + ("译为英文" if contains_cjk(source_text) else "译为中文"))
-            parts[1].setEnabled(True)
+        if not parts:
+            return
+        source_text = (
+            paper.get("abstract", "") if content_type == "abstract" else paper.get("title", "")
+        )
+        prefix = "摘要" if content_type == "abstract" else ""
+        parts[1].setText(prefix + ("译为英文" if contains_cjk(source_text) else "译为中文"))
+        parts[1].setEnabled(True)
         self.view.status_label.setText("翻译失败：" + error)
-        QMessageBox.warning(self, "翻译失败", error)
+        parts[1].setToolTip(error + "；可点击重试")
+
+    def update_task_controls(self) -> None:
+        active = len(self.translation_queue.active)
+        for worker_id in self.translation_queue.active:
+            worker = self.translation_workers.get(worker_id)
+            paper_id, kind = worker_id.rsplit(":", 1)
+            parts = (self.abstract_parts if kind == "abstract" else self.card_parts).get(paper_id)
+            if parts and worker and self.card_cache_keys.get(worker_id) == worker.job.cache_key:
+                parts[1].setText("取消中…" if worker.isInterruptionRequested() else "翻译中…")
+        waiting = len(self.translation_queue.waiting)
+        other = any(worker.isRunning() for worker in self.abstract_workers.values()) or (
+            self.refresh_worker and self.refresh_worker.isRunning()
+        )
+        self.view.cancel_button.setEnabled(bool(active or waiting or other))
+        self.view.task_bar.setVisible(bool(active or waiting or other))
+        self.view.task_count.setText(
+            f"翻译：{active} 项进行中 · {waiting} 项排队" if active or waiting else ""
+        )
+
+    def cancel_tasks(self) -> None:
+        for dialog in self.findChildren(SettingsDialog):
+            if dialog.test_worker and dialog.test_worker.isRunning():
+                dialog.reject()
+        removed = self.translation_queue.cancel()
+        for key in removed:
+            self.update_paper_card(key.rsplit(":", 1)[0])
+        for worker in self.abstract_workers.values():
+            worker.requestInterruption()
+        if self.refresh_worker and self.refresh_worker.isRunning():
+            self.refresh_worker.requestInterruption()
+            self.auto_refresh_resume_at = monotonic() + max(
+                300, int(self.state["settings"].get("refresh_minutes", 30)) * 60
+            )
+        self.view.status_label.setText(
+            "已取消排队任务；正在进行的网络请求结束后会停止，未完成结果不会保存。"
+        )
 
     def closeEvent(self, event) -> None:
         active = (
             (self.refresh_worker and self.refresh_worker.isRunning())
             or any(worker.isRunning() for worker in self.translation_workers.values())
             or any(worker.isRunning() for worker in self.abstract_workers.values())
+            or any(
+                dialog.test_worker and dialog.test_worker.isRunning()
+                for dialog in self.findChildren(SettingsDialog)
+            )
         )
         if active:
-            self.view.status_label.setText("请等待当前刷新、摘要获取或翻译完成后关闭窗口。")
+            self.closing = True
+            self.timer.stop()
+            self.cancel_tasks()
+            self.setEnabled(False)
+            self.view.status_label.setText("正在取消任务并安全关闭，等待当前网络请求退出…")
             event.ignore()
+            QTimer.singleShot(100, self.close)
         else:
+            self.translation_queue.cancel()
             super().closeEvent(event)

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -47,9 +48,11 @@ class SettingsDialog(QDialog):
         self.settings = state["settings"]
         self.key_path = data_dir() / "api-key.bin"
         self.test_worker: TranslateWorker | None = None
+        self.cancel_when_finished = False
         self.setWindowTitle("应用设置")
-        self.resize(820, 610)
-        self.setMinimumWidth(740)
+        available = self.screen().availableGeometry()
+        self.resize(min(820, available.width()), min(610, available.height()))
+        self.setMinimumSize(740, 440)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(25, 23, 25, 22)
         layout.setSpacing(14)
@@ -94,7 +97,11 @@ class SettingsDialog(QDialog):
         form.addRow("", self.clear_key)
         form.addRow("网络代理", self.proxy)
         form.addRow("自动刷新间隔", self.minutes)
-        layout.addWidget(panel)
+        self.form_scroll = QScrollArea()
+        self.form_scroll.setWidgetResizable(True)
+        self.form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.form_scroll.setWidget(panel)
+        layout.addWidget(self.form_scroll, 1)
         self.test_label = QLabel(secret_storage_description())
         self.test_label.setObjectName("notice")
         self.test_label.setWordWrap(True)
@@ -130,21 +137,32 @@ class SettingsDialog(QDialog):
             return
         self.test_button.setEnabled(False)
         self.save_button.setEnabled(False)
-        self.cancel_button.setEnabled(False)
+        self.cancel_button.setEnabled(True)
         self.test_label.setText("正在测试翻译…")
         self.test_worker = TranslateWorker(
             "test", "Learning with technology", endpoint, model, key, self.proxy.text().strip()
         )
         self.test_worker.translated.connect(
-            lambda _id, text: self.test_label.setText("测试成功：" + text)
+            lambda _id, text: (
+                self.test_label.setText("测试成功：" + text)
+                if not self.test_worker.isInterruptionRequested()
+                else None
+            )
         )
         self.test_worker.failed.connect(
-            lambda _id, error: self.test_label.setText("测试失败：" + error)
+            lambda _id, error: (
+                self.test_label.setText("测试失败：" + error)
+                if not self.test_worker.isInterruptionRequested()
+                else None
+            )
         )
         self.test_worker.finished.connect(self.test_finished)
         self.test_worker.start()
 
     def test_finished(self) -> None:
+        if self.cancel_when_finished:
+            super().reject()
+            return
         self.test_button.setEnabled(True)
         self.save_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
@@ -179,13 +197,16 @@ class SettingsDialog(QDialog):
 
     def closeEvent(self, event) -> None:
         if self.test_worker and self.test_worker.isRunning():
-            self.test_label.setText("请等待当前翻译测试完成。")
+            self.reject()
             event.ignore()
         else:
             super().closeEvent(event)
 
     def reject(self) -> None:
         if self.test_worker and self.test_worker.isRunning():
-            self.test_label.setText("请等待当前翻译测试完成。")
+            self.cancel_when_finished = True
+            self.test_worker.requestInterruption()
+            self.cancel_button.setEnabled(False)
+            self.test_label.setText("正在取消测试，当前网络请求退出后自动关闭…")
             return
         super().reject()

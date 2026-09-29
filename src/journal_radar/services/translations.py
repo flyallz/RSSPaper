@@ -1,5 +1,6 @@
 """Immutable translation requests keep asynchronous results in the right cache."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..adapters.translation import contains_cjk, translate_title, translation_key
@@ -28,11 +29,11 @@ class TranslationJob:
 
     @property
     def cache_key(self) -> str:
-        # Retain the previous key format so upgrades can reuse saved translations.
-        cache_text = "摘要：" + self.text if self.content_type == "abstract" else self.text
+        # Title keys stay compatible. Old abstract results may have been silently truncated.
+        cache_text = "摘要v2：" + self.text if self.content_type == "abstract" else self.text
         return translation_key(self.endpoint, self.model, cache_text, self.target_language)
 
-    def execute(self, api_key: str) -> str:
+    def execute(self, api_key: str, cancelled: Callable[[], bool] | None = None) -> str:
         return translate_title(
             self.text,
             self.endpoint,
@@ -41,4 +42,5 @@ class TranslationJob:
             self.proxy,
             self.target_language,
             self.content_type,
+            cancelled,
         )

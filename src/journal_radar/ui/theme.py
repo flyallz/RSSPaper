@@ -1,7 +1,7 @@
 """Visual system for the generic Journal Radar desktop app."""
 
 STYLE = r"""
-QWidget { font-family: "PingFang SC", "Helvetica Neue"; font-size: 12px; color: #203343; }
+QWidget { font-family: "PingFang SC", "Microsoft YaHei UI", "Helvetica Neue", sans-serif; font-size: 12px; color: #203343; }
 QMainWindow, QDialog { background: #F5F7F9; }
 QFrame#sidebar { background: #17374A; border: none; }
 QFrame#sidebar QLabel { color: #D7EBF0; }
