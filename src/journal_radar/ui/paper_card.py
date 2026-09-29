@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
 from ..domain.models import Paper, Settings
 from ..domain.papers import paper_abstract_kind, paper_date_label
+from ..services.ranks import paper_rank_text
 from ..services.translations import TranslationJob
 from .expandable_text import ExpandableText
 from .widgets import make_button
@@ -25,8 +26,10 @@ class PaperCard(QFrame):
     abstract_requested = Signal()
     enrichment_requested = Signal()
     citation_requested = Signal()
+    rank_requested = Signal()
+    import_abstract_requested = Signal()
 
-    def __init__(self, paper: Paper, settings: Settings, translations: dict[str, str]):
+    def __init__(self, paper: Paper, settings: Settings, translations: dict[str, str], state=None):
         super().__init__()
         self.setObjectName("paperCard")
         self.paper_id = paper["id"]
@@ -60,18 +63,41 @@ class PaperCard(QFrame):
             self.enrichment_button = make_button("获取完整摘要")
             self.enrichment_button.setObjectName("textAction")
             self.enrichment_button.setToolTip(
-                "通过 DOI 或唯一的标题匹配查询 Crossref；不保证每篇都有摘要"
+                "查询 DOI 元数据或 ScienceDirect / 知网论文页面；需要登录时可导入保存的网页"
             )
             self.enrichment_button.clicked.connect(self.enrichment_requested.emit)
             self.abstract_actions.insertWidget(0, self.enrichment_button)
         citation = make_button("复制引用")
         citation.setObjectName("textAction")
         citation.clicked.connect(self.citation_requested.emit)
-        self.abstract_actions.addWidget(citation)
+        publication_actions = QHBoxLayout()
+        publication_actions.setSpacing(18)
+        publication_actions.addWidget(citation)
+        rank_button = make_button("期刊标签")
+        rank_button.setObjectName("textAction")
+        rank_button.clicked.connect(self.rank_requested.emit)
+        publication_actions.addWidget(rank_button)
+        import_button = make_button("导入摘要")
+        import_button.setObjectName("textAction")
+        import_button.setToolTip(
+            "导入浏览器保存的论文 HTML，或包含摘要的 CSL / Zotero JSON 文献数据"
+        )
+        import_button.clicked.connect(self.import_abstract_requested.emit)
+        publication_actions.addWidget(import_button)
+        publication_actions.addStretch()
         self.abstract_actions.addStretch()
         column.addLayout(self.abstract_actions)
+        column.addLayout(publication_actions)
         if paper.get("abstract_error"):
             column.addWidget(text_label("摘要补全：" + paper["abstract_error"], "notice"))
+        if state:
+            rank_text, rank_detail = paper_rank_text(paper, state)
+            if rank_text:
+                rank_label = text_label(
+                    "easyScholar · " + rank_text + "（年度未提供）", "translation"
+                )
+                rank_label.setToolTip(rank_detail)
+                column.addWidget(rank_label)
         footer = QHBoxLayout()
         meta = text_label(
             f"{paper.get('source_name', '')}  ·  {paper_date_label(paper)}", "paperMeta"

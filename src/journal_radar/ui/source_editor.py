@@ -48,6 +48,10 @@ class SourceEditor(QDialog):
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.name_edit = QLineEdit(source["name"] if source else "")
         self.name_edit.setPlaceholderText("例如：Nature / 中国科学")
+        self.publication_edit = QLineEdit(source.get("publication_name", "") if source else "")
+        self.publication_edit.setPlaceholderText(
+            "可选：期刊或会议正式全名，用于等级查询；不要填 arXiv 分类"
+        )
         self.kind_box = QComboBox()
         self.kind_box.addItem("RSS / Atom 地址", "rss")
         self.kind_box.addItem("Crossref · ISSN", "crossref")
@@ -74,6 +78,7 @@ class SourceEditor(QDialog):
         self.hint.setWordWrap(True)
         for field in (
             self.name_edit,
+            self.publication_edit,
             self.kind_box,
             self.value_edit,
             self.include_edit,
@@ -81,6 +86,7 @@ class SourceEditor(QDialog):
         ):
             field.setMinimumWidth(430)
         form.addRow("期刊名称", self.name_edit)
+        form.addRow("正式刊名 / 会议名", self.publication_edit)
         form.addRow("来源类型", self.kind_box)
         form.addRow("地址 / ISSN", self.value_edit)
         form.addRow("", self.hint)
@@ -138,5 +144,6 @@ class SourceEditor(QDialog):
         if self.source:
             result["id"] = self.source["id"]
             result["enabled"] = self.source.get("enabled", True)
+        result["publication_name"] = self.publication_edit.text().strip()
         self.result_source = result
         self.accept()

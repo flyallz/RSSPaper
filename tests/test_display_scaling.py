@@ -65,6 +65,23 @@ for button in dialog.findChildren(QPushButton):
         assert button.x() + button.width() <= dialog.width(), button.text()
         assert button.y() + button.height() <= dialog.height(), button.text()
 dialog.reject()
+from journal_radar.ui.rank_dialog import RankDialog
+from journal_radar.services.ranks import store_rank
+from datetime import UTC, datetime
+store_rank(window.state, {"name": "Confirmed Journal", "retrieved_at": datetime.now(UTC).isoformat(), "labels": [{"key": "sci", "label": "SCI / JCR", "value": "Q1", "year": ""}]})
+paper["publication_name"] = "Confirmed Journal"
+dialog = RankDialog(window.state, profile["id"], paper, window.repository, window)
+dialog.resize(640, 360)
+dialog.show()
+for _ in range(6): app.processEvents()
+assert dialog.name_edit.width() > 300
+assert dialog.table.rowCount() == 1
+assert dialog.table.height() > 100
+for button in dialog.findChildren(QPushButton):
+    if button.isVisible():
+        assert button.x() + button.width() <= dialog.width(), button.text()
+        assert button.y() + button.height() <= dialog.height(), button.text()
+dialog.reject()
 window.close()
 """
 

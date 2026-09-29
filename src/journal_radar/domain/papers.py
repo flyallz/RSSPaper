@@ -57,6 +57,7 @@ def make_paper(
         "id": hashlib.sha256((source["id"] + "|" + link).encode("utf-8")).hexdigest(),
         "source_id": source["id"],
         "source_name": source["name"],
+        "publication_name": source.get("publication_name", ""),
         "title": title,
         "url": link,
         "date": date,

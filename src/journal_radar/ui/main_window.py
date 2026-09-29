@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from time import monotonic
 from urllib.parse import urlparse
 
@@ -10,6 +11,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QDialog,
+    QFileDialog,
     QFrame,
     QInputDialog,
     QLabel,
@@ -20,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from journal_radar.adapters.translation import contains_cjk
-from journal_radar.config import APP_NAME
+from journal_radar.config import APP_NAME, MAX_DOWNLOAD
 from journal_radar.domain.state import default_state
 from journal_radar.domain.validation import valid_api_endpoint
 from journal_radar.errors import compact_error
@@ -29,6 +31,8 @@ from journal_radar.platform.secrets import load_api_key
 from journal_radar.storage import StateRepository, current_profile
 
 from ..adapters.abstracts import AbstractResult
+from ..adapters.imported_abstracts import parse_imported_abstract
+from ..adapters.publisher_pages import parse_publisher_abstract
 from ..domain.models import AppState, ContentType, Paper, SourceStatus
 from ..services import TranslationJob, apply_refresh, select_papers
 from ..services.abstracts import AbstractJob, apply_abstract
@@ -36,6 +40,7 @@ from ..services.workspaces import WorkspaceService
 from .citation_dialog import CitationDialog
 from .main_view import MainView
 from .paper_card import PaperCard
+from .rank_dialog import RankDialog
 from .reading_state import ReadingState
 from .settings_dialog import SettingsDialog
 from .sources_dialog import SourcesDialog
@@ -376,7 +381,9 @@ class MainWindow(QMainWindow):
         # The paper may have been excluded by an active filter. Do not change that filter.
 
     def make_paper_card(self, paper: Paper) -> PaperCard:
-        card = PaperCard(paper, self.state["settings"], self.state["translations"])
+        card = PaperCard(paper, self.state["settings"], self.state["translations"], self.state)
+        card.import_abstract_requested.connect(lambda: self.import_web_abstract(paper))
+        card.rank_requested.connect(lambda: self.open_rank(paper))
         card.citation_requested.connect(lambda: self.open_citation(paper))
         card.title_requested.connect(lambda: self.translate_paper(paper))
         card.abstract_requested.connect(lambda: self.translate_abstract(paper))
@@ -411,6 +418,38 @@ class MainWindow(QMainWindow):
                 )
                 parts[1].setEnabled(False)
         return card
+
+    def import_web_abstract(self, paper: Paper) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "选择保存的论文网页或文献数据", "", "论文摘要 (*.html *.htm *.json)"
+        )
+        if not path:
+            return
+        job = AbstractJob.for_paper(current_profile(self.state)["id"], paper)
+        try:
+            with open(path, "rb") as stream:
+                payload = stream.read(MAX_DOWNLOAD + 1)
+            if path.lower().endswith(".json"):
+                result = parse_imported_abstract(payload, job.title, job.url, job.doi)
+            else:
+                result = parse_publisher_abstract(payload, job.url, job.title, job.doi)
+                result = replace(result, source=result.source + "（用户导入）")
+        except Exception as error:
+            self.view.status_label.setText("摘要未导入：" + compact_error(error))
+            return
+        worker = self.abstract_workers.get((job.profile_id, job.paper_id))
+        if worker:
+            worker.requestInterruption()
+        self.store_abstract_result(job, result)
+
+    def open_rank(self, paper: Paper) -> None:
+        dialog = RankDialog(
+            self.state, current_profile(self.state)["id"], paper, self.repository, self
+        )
+        dialog.exec()
+        dialog.deleteLater()
+        if not self.closing:
+            self.render_papers()
 
     def open_citation(self, paper: Paper) -> None:
         CitationDialog(
@@ -449,6 +488,11 @@ class MainWindow(QMainWindow):
         worker = self.abstract_workers.get((job.profile_id, job.paper_id))
         if self.closing or (worker and worker.isInterruptionRequested()):
             return
+        self.store_abstract_result(job, result, error)
+
+    def store_abstract_result(
+        self, job: AbstractJob, result: AbstractResult | None = None, error: str = ""
+    ) -> None:
         if not apply_abstract(self.state, job, result, error):
             return
         save_error = ""
@@ -461,7 +505,11 @@ class MainWindow(QMainWindow):
             self.view.status_label.setText(
                 "摘要结果未保存：" + save_error
                 if save_error
-                else ("完整摘要已获取并缓存，可展开或翻译。" if result else "摘要未补全：" + error)
+                else (
+                    "摘要已获取并缓存，可展开或翻译；完整性以卡片提示为准。"
+                    if result
+                    else "摘要未补全：" + error
+                )
             )
 
     def abstract_finished(self, key: tuple[str, str]) -> None:
@@ -651,6 +699,8 @@ class MainWindow(QMainWindow):
                 dialog.reject()
         for dialog in self.findChildren(CitationDialog):
             dialog.reject()
+        for dialog in self.findChildren(RankDialog):
+            dialog.reject()
         removed = self.translation_queue.cancel()
         for key in removed:
             self.update_paper_card(key.rsplit(":", 1)[0])
@@ -679,6 +729,9 @@ class MainWindow(QMainWindow):
             dialog.worker and dialog.worker.isRunning()
             for dialog in self.findChildren(CitationDialog)
         )
+        active = active or any(
+            dialog.worker and dialog.worker.isRunning() for dialog in self.findChildren(RankDialog)
+        )
         if active:
             self.closing = True
             self.timer.stop()
@@ -688,5 +741,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             QTimer.singleShot(100, self.close)
         else:
-            self.translation_queue.cancel()
+            self.closing = True
+            self.timer.stop()
+            self.cancel_tasks()
             super().closeEvent(event)

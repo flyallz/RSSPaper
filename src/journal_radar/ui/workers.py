@@ -38,7 +38,7 @@ class AbstractWorker(CancellableWorker):
 
     def run(self) -> None:
         try:
-            result = self.job.execute()
+            result = self.job.execute(self.isInterruptionRequested)
             if not self.isInterruptionRequested():
                 self.loaded.emit(result)
         except Exception as error:
@@ -114,3 +114,25 @@ class CitationWorker(CancellableWorker):
         except Exception as error:
             if not self.isInterruptionRequested():
                 self.failed.emit(compact_error(error))
+
+
+class RankWorker(CancellableWorker):
+    loaded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, name, key, proxy=""):
+        super().__init__()
+        self.name, self.key, self.proxy = name, key, proxy
+
+    def run(self):
+        from ..services.ranks import query_rank
+
+        try:
+            result = query_rank(self.name, self.key, self.proxy, self.isInterruptionRequested)
+            if not self.isInterruptionRequested():
+                self.loaded.emit(result)
+        except Exception as error:
+            if not self.isInterruptionRequested():
+                self.failed.emit(compact_error(error))
+        finally:
+            self.key = ""

@@ -54,6 +54,7 @@ class AbstractResult:
     text: str
     doi: str
     source: str = "Crossref"
+    kind: str = "full"
 
 
 def _message(url: str, proxy: str) -> dict:
@@ -101,6 +102,15 @@ def fetch_abstract(doi: str, title: str, proxy: str = "") -> AbstractResult:
     message = _message("https://api.crossref.org/works/" + quote(doi, safe=""), proxy)
     if normalize_doi(str(message.get("DOI") or "")) != doi:
         raise ValueError("返回的 DOI 与论文不一致，已停止补全。")
+    titles = message.get("title")
+    if (
+        isinstance(titles, list)
+        and titles
+        and not any(
+            isinstance(value, str) and _title_key(value) == _title_key(title) for value in titles
+        )
+    ):
+        raise ValueError("Crossref 登记题名与当前论文不一致，已停止补全")
     value = message.get("abstract")
     text = abstract_text(value) if isinstance(value, str) else ""
     kind = abstract_kind(text)

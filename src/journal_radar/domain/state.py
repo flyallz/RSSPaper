@@ -24,11 +24,14 @@ def default_state() -> AppState:
             "api_endpoint": "",
             "api_model": "deepseek-flash",
             "refresh_minutes": 30,
+            "rank_enabled": False,
+            "rank_fields": ["sci", "ssci", "sciUp", "cssci", "pku", "ccf"],
         },
         "papers": {},
         "statuses": {},
         "translations": {},
         "last_refresh": {},
+        "publication_ranks": {},
     }
 
 
@@ -75,6 +78,8 @@ def validate_state(raw: object) -> AppState:
             if not source["id"] or source["id"] in source_ids:
                 raise ValueError("来源标识为空或重复")
             source_ids.add(source["id"])
+            if "publication_name" in source and not isinstance(source["publication_name"], str):
+                raise ValueError("正式刊名应为文本")
             source.setdefault("enabled", True)
             source.setdefault("match_all", False)
             for name in ("enabled", "match_all"):
@@ -97,6 +102,12 @@ def validate_state(raw: object) -> AppState:
     for name in ("proxy", "api_endpoint", "api_model"):
         if not isinstance(state["settings"][name], str):
             raise ValueError("应用设置中的接口、模型或代理无效")
+    if (
+        not isinstance(state["settings"]["rank_enabled"], bool)
+        or not isinstance(state["settings"]["rank_fields"], list)
+        or any(not isinstance(value, str) for value in state["settings"]["rank_fields"])
+    ):
+        raise ValueError("期刊标签设置格式无效")
     interval = state["settings"]["refresh_minutes"]
     if type(interval) is not int or not (interval == 0 or 5 <= interval <= 1440):
         raise ValueError("自动刷新间隔应为 0 或 5–1440 分钟")
@@ -128,6 +139,7 @@ def validate_state(raw: object) -> AppState:
                 "abstract_error",
                 "citation_doi",
                 "citation_warning",
+                "publication_name",
             ):
                 if name in paper and not isinstance(paper[name], str):
                     raise ValueError("论文缓存字段应为文本")
@@ -145,6 +157,25 @@ def validate_state(raw: object) -> AppState:
                 raise ValueError("来源状态无效")
             if not isinstance(status.get("ok"), bool) or type(status.get("count")) is not int:
                 raise ValueError("来源状态缺少有效的结果和数量")
+    ranks = state.get("publication_ranks", {})
+    if not isinstance(ranks, dict):
+        raise ValueError("期刊标签缓存格式无效")
+    for key, record in ranks.items():
+        if (
+            not isinstance(key, str)
+            or not isinstance(record, dict)
+            or any(not isinstance(record.get(field), str) for field in ("name", "retrieved_at"))
+        ):
+            raise ValueError("期刊标签缓存无效")
+        labels = record.get("labels")
+        if not isinstance(labels, list) or any(
+            not isinstance(label, dict)
+            or any(
+                not isinstance(label.get(field), str) for field in ("key", "label", "value", "year")
+            )
+            for label in labels
+        ):
+            raise ValueError("期刊标签内容无效")
     for name in ("translations", "last_refresh"):
         if any(not isinstance(value, str) for value in state[name].values()):
             raise ValueError(f"配置中的 {name} 内容应为文本")

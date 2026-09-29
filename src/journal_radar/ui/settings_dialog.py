@@ -23,15 +23,15 @@ from PySide6.QtWidgets import (
 
 from journal_radar.domain.validation import valid_api_endpoint, valid_http_url
 from journal_radar.errors import compact_error
-from journal_radar.platform.paths import data_dir
 from journal_radar.platform.secrets import load_api_key
 from journal_radar.storage import StateRepository
 
+from ..adapters.ranks import RANK_FIELDS
 from ..domain.models import AppState
 from ..platform.paths import secret_storage_description
 from ..services.workspaces import WorkspaceService
 from .widgets import make_button
-from .workers import TranslateWorker
+from .workers import RankWorker, TranslateWorker
 
 
 class SettingsDialog(QDialog):
@@ -46,8 +46,8 @@ class SettingsDialog(QDialog):
         self.workspaces = WorkspaceService(state, self.repository)
         self.state = state
         self.settings = state["settings"]
-        self.key_path = data_dir() / "api-key.bin"
-        self.test_worker: TranslateWorker | None = None
+        self.key_path = self.repository.folder / "api-key.bin"
+        self.test_worker: TranslateWorker | RankWorker | None = None
         self.cancel_when_finished = False
         self.setWindowTitle("应用设置")
         available = self.screen().availableGeometry()
@@ -60,7 +60,7 @@ class SettingsDialog(QDialog):
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
         intro = QLabel(
-            "翻译仅在点击论文卡片时调用：中文标题译为英文，其他标题译为中文；同一译题会本地缓存。"
+            "翻译与期刊标签均由你主动查询；译文和刊物等级会保存在本机，两个接口使用独立密钥。"
         )
         intro.setObjectName("pageSubtitle")
         intro.setWordWrap(True)
@@ -97,6 +97,31 @@ class SettingsDialog(QDialog):
         form.addRow("", self.clear_key)
         form.addRow("网络代理", self.proxy)
         form.addRow("自动刷新间隔", self.minutes)
+        self.rank_enabled = QCheckBox("启用 easyScholar 期刊 / 会议标签（按需查询）")
+        self.rank_enabled.setChecked(self.settings.get("rank_enabled", False))
+        self.rank_key = QLineEdit()
+        self.rank_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.rank_key.setMinimumWidth(480)
+        self.rank_key.setPlaceholderText("easyScholar Secret Key；留空保留已保存密钥")
+        self.clear_rank_key = QCheckBox("清除已保存的 easyScholar 密钥")
+        self.rank_boxes = {}
+        tags = QWidget()
+        tags_layout = QVBoxLayout(tags)
+        tags_layout.setContentsMargins(0, 0, 0, 0)
+        selected = set(self.settings.get("rank_fields", []))
+        options = list(RANK_FIELDS.items()) + [("custom", "自定义目录（easyScholar 返回）")]
+        for index in range(0, len(options), 2):
+            line = QHBoxLayout()
+            for key, label in options[index : index + 2]:
+                check = QCheckBox(label)
+                check.setChecked(key in selected)
+                self.rank_boxes[key] = check
+                line.addWidget(check, 1)
+            tags_layout.addLayout(line)
+        form.addRow("期刊标签", self.rank_enabled)
+        form.addRow("easyScholar 密钥", self.rank_key)
+        form.addRow("", self.clear_rank_key)
+        form.addRow("显示等级体系", tags)
         self.form_scroll = QScrollArea()
         self.form_scroll.setWidgetResizable(True)
         self.form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -110,6 +135,9 @@ class SettingsDialog(QDialog):
         self.test_button = make_button("测试翻译")
         self.test_button.clicked.connect(self.test_translation)
         row.addWidget(self.test_button)
+        self.rank_test_button = make_button("测试期刊接口")
+        self.rank_test_button.clicked.connect(self.test_rank)
+        row.addWidget(self.rank_test_button)
         row.addStretch()
         self.save_button = make_button("保存设置", "primary")
         self.cancel_button = make_button("取消")
@@ -135,6 +163,7 @@ class SettingsDialog(QDialog):
         if not key and urlparse(endpoint).hostname not in ("localhost", "127.0.0.1", "::1"):
             QMessageBox.warning(self, "缺少密钥", "远程翻译接口需要 API 密钥，本地接口可留空。")
             return
+        self.rank_test_button.setEnabled(False)
         self.test_button.setEnabled(False)
         self.save_button.setEnabled(False)
         self.cancel_button.setEnabled(True)
@@ -159,10 +188,48 @@ class SettingsDialog(QDialog):
         self.test_worker.finished.connect(self.test_finished)
         self.test_worker.start()
 
+    def test_rank(self) -> None:
+        try:
+            key = self.rank_key.text().strip() or (
+                ""
+                if self.clear_rank_key.isChecked()
+                else load_api_key(self.repository.folder / "easyscholar-key.bin")
+            )
+        except Exception as error:
+            QMessageBox.warning(self, "密钥不可用", compact_error(error))
+            return
+        if not key:
+            self.test_label.setText("请填写 easyScholar 密钥。")
+            return
+        self.test_button.setEnabled(False)
+        self.rank_test_button.setEnabled(False)
+        self.save_button.setEnabled(False)
+        self.test_label.setText("正在查询 Nature 以测试期刊接口；不修改期刊缓存。")
+        self.test_worker = RankWorker("Nature", key, self.proxy.text().strip())
+        self.test_worker.loaded.connect(
+            lambda result: (
+                self.test_label.setText(
+                    f"接口可用：Nature 返回 {len(result['labels'])} 项信息（不代表年度已核实）。"
+                )
+                if not self.test_worker.isInterruptionRequested()
+                else None
+            )
+        )
+        self.test_worker.failed.connect(
+            lambda error: (
+                self.test_label.setText("期刊接口测试失败：" + error)
+                if not self.test_worker.isInterruptionRequested()
+                else None
+            )
+        )
+        self.test_worker.finished.connect(self.test_finished)
+        self.test_worker.start()
+
     def test_finished(self) -> None:
         if self.cancel_when_finished:
             super().reject()
             return
+        self.rank_test_button.setEnabled(True)
         self.test_button.setEnabled(True)
         self.save_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
@@ -185,11 +252,16 @@ class SettingsDialog(QDialog):
                 "api_model": self.model.text().strip(),
                 "proxy": proxy,
                 "refresh_minutes": self.minutes.value(),
+                "rank_enabled": self.rank_enabled.isChecked(),
+                "rank_fields": [key for key, check in self.rank_boxes.items() if check.isChecked()],
             }
         )
         credential = "" if self.clear_key.isChecked() else (self.key_edit.text().strip() or None)
         try:
-            self.workspaces.save_settings(settings, credential)
+            rank_credential = (
+                "" if self.clear_rank_key.isChecked() else (self.rank_key.text().strip() or None)
+            )
+            self.workspaces.save_settings(settings, credential, rank_credential)
         except Exception as error:
             QMessageBox.warning(self, "保存失败", compact_error(error))
             return

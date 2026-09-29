@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 from datetime import date as calendar_date
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from ..domain.models import Paper, Source
 from ..domain.papers import abstract_kind, make_paper, normalize_doi
@@ -102,11 +102,27 @@ def _description_date(value: str) -> tuple[str, str, str]:
 def parse_rss(payload: bytes, source: Source) -> list[Paper]:
     root = ET.fromstring(payload)
     papers: list[Paper] = []
+    publication = source.get("publication_name", "")
+    host = urlparse(source["value"]).hostname or ""
+    if not publication and host in ("rss.cnki.net", "rss.sciencedirect.com"):
+        channel = next((node for node in root if _local(node.tag) == "channel"), None)
+        if channel is not None:
+            title_node = next((node for node in channel if _local(node.tag) == "title"), None)
+            if title_node is not None:
+                publication = re.sub(
+                    r"^ScienceDirect\s+(?:Publication|Journal)\s*:\s*",
+                    "",
+                    _text(title_node),
+                    flags=re.I,
+                )
+                if publication.lower() in ("cnki", "sciencedirect", "中国知网"):
+                    publication = ""
     for item in root.iter():
         if _local(item.tag) not in ("item", "entry"):
             continue
         title = link = date = description = precision = date_kind = doi = ""
         contents = []
+        item_publication = publication
         for child in item:
             field = _local(child.tag)
             if field == "title" and not title:
@@ -124,6 +140,8 @@ def parse_rss(payload: bytes, source: Source) -> list[Paper]:
                 contents.append(_text(child))
             elif field in ("encoded", "content", "abstract"):
                 contents.append(_text(child))
+            elif field == "publicationname" and not item_publication:
+                item_publication = _text(child)
             elif field in ("doi", "identifier", "guid") and not doi:
                 doi = normalize_doi(_text(child))
         if not date and description:
@@ -140,6 +158,14 @@ def parse_rss(payload: bytes, source: Source) -> list[Paper]:
                     source, title, link, date, precision, date_kind, abstract, doi, "RSS / Atom"
                 )
             )
+            if not item_publication and description:
+                plain = re.sub(r"<[^>]+>", " ", html.unescape(description))
+                match = re.search(
+                    r"\bSource:\s*(.+?)(?:,\s*(?:Volume|Issue)|\s+Authors?\(s\):|$)", plain, re.I
+                )
+                if match:
+                    item_publication = match[1].strip()
+            papers[-1]["publication_name"] = item_publication
         if len(papers) >= 60:
             break
     return papers

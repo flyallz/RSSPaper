@@ -89,13 +89,20 @@ def apply_refresh(
         entries = new_papers.get(source["id"])
         if entries is None:
             entries = [paper for paper in previous if paper.get("source_id") == source["id"]]
-        combined.extend(
-            retain_citations(
-                retain_enrichment(paper, previous_by_id.get(paper["id"])),
-                previous_by_id.get(paper["id"]),
+        for paper in entries:
+            old = previous_by_id.get(paper["id"])
+            if (
+                old
+                and not paper.get("publication_name")
+                and (paper["title"], paper["url"]) == (old["title"], old["url"])
+            ):
+                paper = {**paper, "publication_name": old.get("publication_name", "")}
+            combined.append(
+                retain_citations(
+                    retain_enrichment(paper, old),
+                    old,
+                )
             )
-            for paper in entries
-        )
     unique = {paper["id"]: paper for paper in combined}
     state["papers"][profile_id] = sort_papers(list(unique.values()))
     state["statuses"][profile_id] = {

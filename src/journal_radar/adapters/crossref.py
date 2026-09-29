@@ -54,6 +54,9 @@ def parse_crossref(payload: bytes, source: Source) -> list[Paper]:
                 doi=doi,
                 abstract_source="Crossref",
             )
+            names = item.get("container-title") or []
+            if isinstance(names, list) and names and isinstance(names[0], str):
+                paper["publication_name"] = html.unescape(names[0]).strip()
             if abstract_kind(abstract) == "available":
                 paper["abstract_kind"] = "full"
             papers.append(paper)

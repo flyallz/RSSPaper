@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from ..adapters.abstracts import AbstractResult, fetch_abstract
+from ..adapters.abstract_enrichment import fetch_complete_abstract
+from ..adapters.abstracts import AbstractResult
 from ..domain.models import AppState, Paper
 from ..domain.papers import normalize_doi, paper_abstract_kind
 
@@ -30,8 +31,8 @@ class AbstractJob:
             proxy,
         )
 
-    def execute(self) -> AbstractResult:
-        return fetch_abstract(self.doi, self.title, self.proxy)
+    def execute(self, cancelled=None) -> AbstractResult:
+        return fetch_complete_abstract(self.doi, self.title, self.url, self.proxy, cancelled)
 
 
 def apply_abstract(
@@ -50,10 +51,10 @@ def apply_abstract(
         if result:
             paper.update(
                 abstract=result.text,
-                abstract_kind="full",
+                abstract_kind=result.kind,
                 abstract_source=result.source,
                 abstract_retrieved_at=datetime.now(UTC).isoformat(),
-                doi=result.doi,
+                doi=result.doi or paper.get("doi", ""),
                 abstract_error="",
             )
         elif paper_abstract_kind(paper) != "full":
