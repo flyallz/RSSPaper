@@ -10,6 +10,7 @@ from ..domain.models import ContentType, Language, Source
 from ..errors import compact_error
 from ..services import TranslationJob, refresh_sources
 from ..services.abstracts import AbstractJob
+from ..services.citations import CitationJob
 
 
 class CancellableWorker(QThread):
@@ -95,3 +96,21 @@ class TranslateWorker(CancellableWorker):
                 self.failed.emit(self.paper_id, compact_error(error))
         finally:
             self.api_key = ""
+
+
+class CitationWorker(CancellableWorker):
+    loaded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, job: CitationJob):
+        super().__init__()
+        self.job = job
+
+    def run(self) -> None:
+        try:
+            result = self.job.execute(self.isInterruptionRequested)
+            if not self.isInterruptionRequested():
+                self.loaded.emit(result)
+        except Exception as error:
+            if not self.isInterruptionRequested():
+                self.failed.emit(compact_error(error))

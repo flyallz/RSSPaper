@@ -37,6 +37,9 @@ class Paper(TypedDict):
     abstract_source: NotRequired[str]
     abstract_retrieved_at: NotRequired[str]
     abstract_error: NotRequired[str]
+    citations: NotRequired[dict[str, str]]
+    citation_doi: NotRequired[str]
+    citation_warning: NotRequired[str]
 
 
 class Settings(TypedDict):

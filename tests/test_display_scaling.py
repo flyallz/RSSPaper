@@ -51,6 +51,20 @@ for dialog in (SettingsDialog(window.state, window), SourceEditor(source, window
         if button.isVisible() and not dialog.form_scroll.isAncestorOf(button):
             assert button.y() + button.height() <= dialog.height()
     dialog.close()
+from journal_radar.ui.citation_dialog import CitationDialog
+paper.update(citation_doi="10.1000/a", citations={"apa": "Author. (2026). A paper. Journal. https://doi.org/10.1000/a"})
+dialog = CitationDialog(window.state, profile["id"], paper, window.repository, window)
+dialog.resize(640, 360)
+dialog.show()
+for _ in range(6): app.processEvents()
+assert dialog.copy_button.isEnabled()
+assert dialog.preview.height() > 100
+assert dialog.doi_edit.width() > 120
+for button in dialog.findChildren(QPushButton):
+    if button.isVisible():
+        assert button.x() + button.width() <= dialog.width(), button.text()
+        assert button.y() + button.height() <= dialog.height(), button.text()
+dialog.reject()
 window.close()
 """
 

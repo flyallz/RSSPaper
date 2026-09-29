@@ -126,9 +126,17 @@ def validate_state(raw: object) -> AppState:
                 "abstract_source",
                 "abstract_retrieved_at",
                 "abstract_error",
+                "citation_doi",
+                "citation_warning",
             ):
                 if name in paper and not isinstance(paper[name], str):
                     raise ValueError("论文缓存字段应为文本")
+            citations = paper.get("citations", {})
+            if not isinstance(citations, dict) or any(
+                not isinstance(key, str) or not isinstance(value, str)
+                for key, value in citations.items()
+            ):
+                raise ValueError("引用缓存应为文本格式与内容")
     for statuses in state["statuses"].values():
         if not isinstance(statuses, dict):
             raise ValueError("来源状态应为对象")

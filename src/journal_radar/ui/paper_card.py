@@ -24,6 +24,7 @@ class PaperCard(QFrame):
     title_requested = Signal()
     abstract_requested = Signal()
     enrichment_requested = Signal()
+    citation_requested = Signal()
 
     def __init__(self, paper: Paper, settings: Settings, translations: dict[str, str]):
         super().__init__()
@@ -63,6 +64,10 @@ class PaperCard(QFrame):
             )
             self.enrichment_button.clicked.connect(self.enrichment_requested.emit)
             self.abstract_actions.insertWidget(0, self.enrichment_button)
+        citation = make_button("复制引用")
+        citation.setObjectName("textAction")
+        citation.clicked.connect(self.citation_requested.emit)
+        self.abstract_actions.addWidget(citation)
         self.abstract_actions.addStretch()
         column.addLayout(self.abstract_actions)
         if paper.get("abstract_error"):
@@ -116,7 +121,10 @@ class PaperCard(QFrame):
         column.addWidget(translation)
         actions = self.abstract_actions
         actions.addWidget(abstract.toggle)
-        actions.addWidget(abstract.copy_button)
+        if kind != "metadata":
+            actions.addWidget(abstract.copy_button)
+        else:
+            abstract.copy_button.hide()
         translated_actions = QHBoxLayout()
         translated_actions.setSpacing(18)
         translated_actions.addWidget(translation.toggle)

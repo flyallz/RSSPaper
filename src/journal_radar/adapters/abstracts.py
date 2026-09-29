@@ -69,12 +69,13 @@ def _message(url: str, proxy: str) -> dict:
     return message
 
 
-def fetch_abstract(doi: str, title: str, proxy: str = "") -> AbstractResult:
+def resolve_doi(doi: str, title: str, proxy: str = "") -> str:
+    """Resolve only an explicit DOI or one uniquely matching normalized title."""
     doi = normalize_doi(doi)
     if not doi:
         key = _title_key(title)
         if not key:
-            raise ValueError("论文没有 DOI 或有效标题，无法查询摘要。")
+            raise ValueError("论文没有 DOI 或有效标题，无法查询 DOI。")
         query = urlencode({"query.bibliographic": title, "rows": 5, "select": "DOI,title"})
         items = _message("https://api.crossref.org/works?" + query, proxy).get("items", [])
         matches = set()
@@ -90,8 +91,13 @@ def fetch_abstract(doi: str, title: str, proxy: str = "") -> AbstractResult:
             ):
                 matches.add(candidate)
         if len(matches) != 1:
-            raise ValueError("没有唯一且标题一致的 DOI 匹配，已保留现有内容；可打开原文查看摘要。")
+            raise ValueError("没有唯一且标题一致的 DOI 匹配，请补充 DOI 或打开原文核对。")
         doi = matches.pop()
+    return doi
+
+
+def fetch_abstract(doi: str, title: str, proxy: str = "") -> AbstractResult:
+    doi = resolve_doi(doi, title, proxy)
     message = _message("https://api.crossref.org/works/" + quote(doi, safe=""), proxy)
     if normalize_doi(str(message.get("DOI") or "")) != doi:
         raise ValueError("返回的 DOI 与论文不一致，已停止补全。")

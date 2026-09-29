@@ -10,6 +10,7 @@ from ..domain.models import AppState, Paper, Source, SourceStatus
 from ..domain.papers import sort_papers
 from ..errors import compact_error
 from .abstracts import retain_enrichment
+from .citations import retain_citations
 
 
 def now_label() -> str:
@@ -89,7 +90,11 @@ def apply_refresh(
         if entries is None:
             entries = [paper for paper in previous if paper.get("source_id") == source["id"]]
         combined.extend(
-            retain_enrichment(paper, previous_by_id.get(paper["id"])) for paper in entries
+            retain_citations(
+                retain_enrichment(paper, previous_by_id.get(paper["id"])),
+                previous_by_id.get(paper["id"]),
+            )
+            for paper in entries
         )
     unique = {paper["id"]: paper for paper in combined}
     state["papers"][profile_id] = sort_papers(list(unique.values()))

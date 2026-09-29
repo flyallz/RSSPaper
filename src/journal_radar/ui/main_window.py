@@ -33,6 +33,7 @@ from ..domain.models import AppState, ContentType, Paper, SourceStatus
 from ..services import TranslationJob, apply_refresh, select_papers
 from ..services.abstracts import AbstractJob, apply_abstract
 from ..services.workspaces import WorkspaceService
+from .citation_dialog import CitationDialog
 from .main_view import MainView
 from .paper_card import PaperCard
 from .reading_state import ReadingState
@@ -376,6 +377,7 @@ class MainWindow(QMainWindow):
 
     def make_paper_card(self, paper: Paper) -> PaperCard:
         card = PaperCard(paper, self.state["settings"], self.state["translations"])
+        card.citation_requested.connect(lambda: self.open_citation(paper))
         card.title_requested.connect(lambda: self.translate_paper(paper))
         card.abstract_requested.connect(lambda: self.translate_abstract(paper))
         card.enrichment_requested.connect(lambda: self.enrich_abstract(paper))
@@ -409,6 +411,11 @@ class MainWindow(QMainWindow):
                 )
                 parts[1].setEnabled(False)
         return card
+
+    def open_citation(self, paper: Paper) -> None:
+        CitationDialog(
+            self.state, current_profile(self.state)["id"], paper, self.repository, self
+        ).exec()
 
     def enrich_abstract(self, paper: Paper) -> None:
         job = AbstractJob.for_paper(
@@ -642,6 +649,8 @@ class MainWindow(QMainWindow):
         for dialog in self.findChildren(SettingsDialog):
             if dialog.test_worker and dialog.test_worker.isRunning():
                 dialog.reject()
+        for dialog in self.findChildren(CitationDialog):
+            dialog.reject()
         removed = self.translation_queue.cancel()
         for key in removed:
             self.update_paper_card(key.rsplit(":", 1)[0])
@@ -665,6 +674,10 @@ class MainWindow(QMainWindow):
                 dialog.test_worker and dialog.test_worker.isRunning()
                 for dialog in self.findChildren(SettingsDialog)
             )
+        )
+        active = active or any(
+            dialog.worker and dialog.worker.isRunning()
+            for dialog in self.findChildren(CitationDialog)
         )
         if active:
             self.closing = True
