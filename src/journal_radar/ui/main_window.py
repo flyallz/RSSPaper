@@ -326,12 +326,11 @@ class MainWindow(QMainWindow):
             ).cache_key
         for kind, parts in (("title", card.title_parts), ("abstract", card.abstract_parts)):
             worker = self.translation_workers.get(paper["id"] + ":" + kind)
-            if (
-                parts
-                and worker
-                and worker.job.cache_key == self.card_cache_keys.get(paper["id"] + ":" + kind)
-            ):
-                parts[1].setText("翻译中…")
+            if parts and worker:
+                same_text = worker.job.cache_key == self.card_cache_keys.get(
+                    paper["id"] + ":" + kind
+                )
+                parts[1].setText("翻译中…" if same_text else "等待之前的翻译…")
                 parts[1].setEnabled(False)
         return card
 
@@ -441,10 +440,12 @@ class MainWindow(QMainWindow):
                 item, error, kind
             )
         )
-        worker.finished.connect(
-            lambda item_id=worker_id: self.translation_workers.pop(item_id, None)
-        )
+        worker.finished.connect(lambda item_id=worker_id: self.translation_finished(item_id))
         worker.start()
+
+    def translation_finished(self, worker_id: str) -> None:
+        self.translation_workers.pop(worker_id, None)
+        self.render_papers()
 
     def translation_done(self, paper: Paper, text: str, job: TranslationJob) -> None:
         content_type = job.content_type

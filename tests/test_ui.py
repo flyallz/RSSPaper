@@ -87,6 +87,35 @@ class UiTests(unittest.TestCase):
             )
             window.close()
 
+    def test_enrichment_waits_for_old_translation_then_offers_new_abstract_translation(self):
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            patch.dict(os.environ, JOURNAL_RADAR_HOME=folder),
+        ):
+            window = MainWindow()
+            source = create_source("Example", "rss", "https://example.org/rss")
+            paper = make_paper(
+                source, "Learning", "https://example.org/p", "", abstract="Old teaser…"
+            )
+            profile = window.state["profiles"][0]
+            profile["sources"] = [source]
+            window.state["papers"][profile["id"]] = [paper]
+            key = paper["id"] + ":abstract"
+            worker = TranslateWorker(
+                key, paper["abstract"], "", "model", "", "", content_type="abstract"
+            )
+            window.translation_workers[key] = worker
+            job = AbstractJob.for_paper(profile["id"], paper)
+            window.abstract_done(job, AbstractResult("新的完整中文摘要", "10.1000/a"))
+            button = window.abstract_parts[paper["id"]][1]
+            self.assertFalse(button.isEnabled())
+            self.assertEqual(button.text(), "等待之前的翻译…")
+            window.translation_finished(key)
+            button = window.abstract_parts[paper["id"]][1]
+            self.assertTrue(button.isEnabled())
+            self.assertEqual(button.text(), "摘要译为英文")
+            window.close()
+
     def test_card_expand_and_translate_actions_are_independent(self):
         state = default_state()
         source = create_source("Example", "rss", "https://example.org/rss")
